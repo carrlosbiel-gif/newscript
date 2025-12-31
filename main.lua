@@ -1,4 +1,4 @@
--- [BIELZINN HUB V4 - XENO & CONTROLE OPTIMIZED]
+-- [BIELZINN HUB V4 - FAST AIM & HEADSHOT]
 local _P = game:GetService("Players")
 local _R = game:GetService("RunService")
 local _U = game:GetService("UserInputService")
@@ -16,8 +16,9 @@ local _DATA = {
         FOV = 150,
         ShowFOV = false,
         TargetPart = "Head",
-        MaxDistance = 500,
-        Smoothness = 0.12,
+        MaxDistance = 600,
+        -- VELOCIDADE DE PUXADA: 0.4 é muito rápido, 0.1 é lento.
+        Smoothness = 0.35, 
         IsAiming = false
     }
 }
@@ -29,7 +30,7 @@ _FOV_CIRC.Thickness = 1
 _FOV_CIRC.NumSides = 40
 _FOV_CIRC.Radius = _DATA.Aimbot.FOV
 _FOV_CIRC.Visible = false
-_FOV_CIRC.Color = Color3.new(1,1,1)
+_FOV_CIRC.Color = Color3.new(1,0,0) -- Vermelho para FOV de combate
 
 -- [DETECTOR DE INPUT]
 _U.InputBegan:Connect(function(i, p)
@@ -53,7 +54,7 @@ local function CreateESP(Player)
     _E_TBL[Player] = Box
 end
 
--- [INTERFAZ]
+-- [INTERFACE]
 local UI = Instance.new("ScreenGui", game:GetService("CoreGui"))
 UI.Name = "BielzinnHubV4"
 
@@ -67,9 +68,9 @@ Instance.new("UICorner", Main)
 
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, 0, 0, 35)
-Title.Text = "BIELZINN V4"
+Title.Text = "BIELZINN V4 | AGGRESSIVE"
 Title.TextColor3 = Color3.new(1,1,1)
-Title.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+Title.BackgroundColor3 = Color3.fromRGB(40, 0, 0) -- Cor de alerta (Modo Rápido)
 Instance.new("UICorner", Title)
 
 -- Botão Minimizar
@@ -110,9 +111,9 @@ AddBtn("AIMBOT: OFF", 10, function(b)
     b.Text = "AIMBOT: " .. (_DATA.Aimbot.Enabled and "ON" or "OFF")
 end)
 
-AddBtn("ALVO: CABEÇA", 50, function(b)
-    _DATA.Aimbot.TargetPart = (_DATA.Aimbot.TargetPart == "Head" and "HumanoidRootPart" or "Head")
-    b.Text = "ALVO: " .. (_DATA.Aimbot.TargetPart == "Head" and "CABEÇA" or "PEITO")
+AddBtn("AUMENTAR VELOCIDADE", 50, function(b)
+    _DATA.Aimbot.Smoothness = math.min(_DATA.Aimbot.Smoothness + 0.05, 1)
+    b.Text = "VELOCIDADE: " .. tostring(math.floor(_DATA.Aimbot.Smoothness * 100)) .. "%"
 end)
 
 AddBtn("ESP: OFF", 90, function(b)
@@ -132,7 +133,7 @@ AddBtn("OTIMIZAR FPS", 130, function(b)
     b.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
 end)
 
--- [LOOP]
+-- [LOOP DE ATUALIZAÇÃO]
 _R.Heartbeat:Connect(function()
     _FOV_CIRC.Visible = _DATA.Aimbot.ShowFOV
     _FOV_CIRC.Position = _U:GetMouseLocation()
@@ -140,21 +141,32 @@ _R.Heartbeat:Connect(function()
     if _DATA.Aimbot.Enabled and _DATA.Aimbot.IsAiming then
         local target = nil
         local dist = _DATA.Aimbot.FOV
+        local screenCenter = Vector2.new(_C.ViewportSize.X/2, _C.ViewportSize.Y/2)
+
         for _, v in pairs(_P:GetPlayers()) do
             if v ~= _L and v.Character and v.Character:FindFirstChild(_DATA.Aimbot.TargetPart) then
-                local p, ons = _C:WorldToViewportPoint(v.Character[_DATA.Aimbot.TargetPart].Position)
-                local mag = (Vector2.new(p.X, p.Y) - Vector2.new(_C.ViewportSize.X/2, _C.ViewportSize.Y/2)).Magnitude
-                if ons and mag < dist then
-                    dist = mag
-                    target = v.Character[_DATA.Aimbot.TargetPart]
+                -- Checa se o inimigo está vivo
+                if v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
+                    local part = v.Character[_DATA.Aimbot.TargetPart]
+                    local p, ons = _C:WorldToViewportPoint(part.Position)
+                    local mag = (Vector2.new(p.X, p.Y) - screenCenter).Magnitude
+                    
+                    if ons and mag < dist then
+                        dist = mag
+                        target = part
+                    end
                 end
             end
         end
+
         if target then
-            _C.CFrame = _C.CFrame:Lerp(CFrame.new(_C.CFrame.Position, target.Position), _DATA.Aimbot.Smoothness)
+            -- PUXADA AGGRESSIVA: Usa Lerp com Smoothness maior para travar na cabeça
+            local goal = CFrame.new(_C.CFrame.Position, target.Position)
+            _C.CFrame = _C.CFrame:Lerp(goal, _DATA.Aimbot.Smoothness)
         end
     end
 
+    -- ESP UPDATE
     if _DATA.ESP.Enabled then
         for p, box in pairs(_E_TBL) do
             if p and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
