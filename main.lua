@@ -8,14 +8,13 @@ local Settings = {
     ESP = {
         Enabled = false,
         TeamCheck = false,
-        BoxColor = Color3.fromRGB(0, 255, 0),
     },
     Aimbot = {
         Enabled = false,
         TeamCheck = false,
         FOV = 150,
         ShowFOV = false,
-        TargetPart = "Head"
+        TargetPart = "Head" -- Alterna entre "Head" e "HumanoidRootPart" (Peito)
     }
 }
 
@@ -59,7 +58,6 @@ local function CreateESP(Player)
     ESP_Table[Player] = Objects
 end
 
--- Atualizar ESP
 -- Atualizar ESP com Cor Dinâmica por Vida
 local function UpdateESP(Player, Objects)
     local Char = Player.Character
@@ -76,15 +74,13 @@ local function UpdateESP(Player, Objects)
         local Dist = (Camera.CFrame.Position - Root.Position).Magnitude
         local Scale = 1000 / Dist
         
-        -- CÁLCULO DA COR PELA VIDA
-        -- Vida / Vida Máxima (ex: 50/100 = 0.5)
+        -- Lógica de Cor por Vida (Verde -> Amarelo -> Vermelho)
         local healthPercent = Hum.Health / Hum.MaxHealth
-        -- Interpola de Vermelho (0) para Verde (1)
         local dynamicColor = Color3.fromHSV(healthPercent * 0.3, 1, 1) 
 
         Objects.Box.Size = Vector2.new(Scale, Scale * 1.5)
         Objects.Box.Position = Vector2.new(Pos.X - Scale/2, Pos.Y - Scale/0.75)
-        Objects.Box.Color = dynamicColor -- Aplica a cor da vida
+        Objects.Box.Color = dynamicColor
         Objects.Box.Visible = true
         
         Objects.Distance.Text = math.floor(Dist) .. "m [" .. math.floor(Hum.Health) .. " HP]"
@@ -128,22 +124,19 @@ MainFrame.Active = true
 MainFrame.Draggable = true
 Instance.new("UICorner", MainFrame)
 
--- BACKGROUND IMAGE (A foto que você mandou)
 local BackgroundImg = Instance.new("ImageLabel", MainFrame)
-BackgroundImg.Name = "FundoCLT"
-BackgroundImg.Size = UDim2.new(1, 0, 1, 0) -- Ocupa o painel todo
-BackgroundImg.Position = UDim2.new(0, 0, 0, 0)
-BackgroundImg.Image = "rbxassetid://13247072551" -- O ID da foto que estava no script
+BackgroundImg.Size = UDim2.new(1, 0, 1, 0)
+BackgroundImg.Image = "rbxassetid://13247072551"
 BackgroundImg.BackgroundTransparency = 1
 BackgroundImg.ScaleType = Enum.ScaleType.Stretch
-BackgroundImg.ZIndex = 0 -- Fica atrás de tudo
+BackgroundImg.ZIndex = 0
 Instance.new("UICorner", BackgroundImg)
 
 local Title = Instance.new("TextLabel", MainFrame)
 Title.Size = UDim2.new(1, 0, 0, 40)
 Title.Text = "BIELZINN HUB | CLT V3"
 Title.TextColor3 = Color3.new(1,1,1)
-Title.BackgroundTransparency = 0.3 -- Leve transparência para ver o fundo
+Title.BackgroundTransparency = 0.3
 Title.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 Title.Font = Enum.Font.GothamBold
 Title.ZIndex = 2
@@ -170,7 +163,7 @@ local function NewBtn(txt, pos, color)
     b.Position = pos
     b.Text = txt
     b.BackgroundColor3 = color
-    b.BackgroundTransparency = 0.2 -- Transparência para ver o fundo CLT
+    b.BackgroundTransparency = 0.2
     b.TextColor3 = Color3.new(1,1,1)
     b.Font = Enum.Font.GothamBold
     b.ZIndex = 3
@@ -178,22 +171,23 @@ local function NewBtn(txt, pos, color)
     return b
 end
 
-local AimBtn = NewBtn("Aimbot: OFF", UDim2.new(0, 20, 0, 10), Color3.fromRGB(30, 30, 30))
-local EspBtn = NewBtn("ESP: OFF", UDim2.new(0, 20, 0, 60), Color3.fromRGB(30, 30, 30))
-local FovVisBtn = NewBtn("Ver Círculo: OFF", UDim2.new(0, 20, 0, 110), Color3.fromRGB(30, 30, 30))
+local AimBtn = NewBtn("Aimbot: OFF", UDim2.new(0, 20, 0, 5), Color3.fromRGB(30, 30, 30))
+local TargetBtn = NewBtn("Alvo: CABEÇA", UDim2.new(0, 20, 0, 50), Color3.fromRGB(30, 30, 30)) -- NOVO: Botão Cabeça/Peito
+local EspBtn = NewBtn("ESP: OFF", UDim2.new(0, 20, 0, 95), Color3.fromRGB(30, 30, 30))
+local FovVisBtn = NewBtn("Ver Círculo: OFF", UDim2.new(0, 20, 0, 140), Color3.fromRGB(30, 30, 30))
 
 local DisplayFov = Instance.new("TextLabel", Content)
 DisplayFov.Size = UDim2.new(0, 310, 0, 30)
-DisplayFov.Position = UDim2.new(0, 20, 0, 160)
+DisplayFov.Position = UDim2.new(0, 20, 0, 185)
 DisplayFov.Text = "FOV: " .. Settings.Aimbot.FOV
 DisplayFov.TextColor3 = Color3.fromRGB(255, 255, 255)
 DisplayFov.BackgroundTransparency = 1
 DisplayFov.Font = Enum.Font.GothamBold
 DisplayFov.ZIndex = 3
 
-local Menos = NewBtn("FOV -10", UDim2.new(0, 20, 0, 200), Color3.fromRGB(150, 50, 50))
+local Menos = NewBtn("FOV -10", UDim2.new(0, 20, 0, 220), Color3.fromRGB(150, 50, 50))
 Menos.Size = UDim2.new(0, 150, 0, 40)
-local Mais = NewBtn("FOV +10", UDim2.new(0, 180, 0, 200), Color3.fromRGB(50, 100, 150))
+local Mais = NewBtn("FOV +10", UDim2.new(0, 180, 0, 220), Color3.fromRGB(50, 100, 150))
 Mais.Size = UDim2.new(0, 150, 0, 40)
 
 -- Lógica Minimizar
@@ -211,6 +205,16 @@ AimBtn.MouseButton1Click:Connect(function()
     Settings.Aimbot.Enabled = not Settings.Aimbot.Enabled
     AimBtn.Text = "Aimbot: " .. (Settings.Aimbot.Enabled and "ON" or "OFF")
     AimBtn.BackgroundColor3 = Settings.Aimbot.Enabled and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(30, 30, 30)
+end)
+
+TargetBtn.MouseButton1Click:Connect(function()
+    if Settings.Aimbot.TargetPart == "Head" then
+        Settings.Aimbot.TargetPart = "HumanoidRootPart"
+        TargetBtn.Text = "Alvo: PEITO"
+    else
+        Settings.Aimbot.TargetPart = "Head"
+        TargetBtn.Text = "Alvo: CABEÇA"
+    end
 end)
 
 EspBtn.MouseButton1Click:Connect(function()
@@ -245,7 +249,9 @@ RunService.RenderStepped:Connect(function()
     end
     if Settings.Aimbot.Enabled then
         local T = GetClosestPlayer()
-        if T then Camera.CFrame = CFrame.new(Camera.CFrame.Position, T.Character.Head.Position) end
+        if T and T.Character and T.Character:FindFirstChild(Settings.Aimbot.TargetPart) then 
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, T.Character[Settings.Aimbot.TargetPart].Position) 
+        end
     end
     for Player, Objects in pairs(ESP_Table) do
         UpdateESP(Player, Objects)
