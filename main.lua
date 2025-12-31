@@ -8,26 +8,19 @@ local _DATA = {
     ESP = { Enabled = false },
     Aimbot = {
         Enabled = false,
+        -- Detecta o gatilho de mira do controle (L2/LT)
+        ActiveKey = Enum.KeyCode.ButtonL2, 
+        IsPressed = false,
         FOV = 150,
         ShowFOV = false,
         TargetPart = "Head",
         MaxDistance = 500,
-        Smoothness = 0.15, -- Suavização (0.05 a 0.20 é o mais seguro)
-        Jitter = 0.35      -- Randomização (faz a mira tremer levemente como um humano)
+        Smoothness = 0.12, 
+        Jitter = 0.35      
     }
 }
 
--- [DESENHO DO FOV]
-local _FOV_CIRC = Drawing.new("Circle")
-_FOV_CIRC.Thickness = 1
-_FOV_CIRC.NumSides = 100
-_FOV_CIRC.Radius = _DATA.Aimbot.FOV
-_FOV_CIRC.Visible = false
-_FOV_CIRC.Color = Color3.fromRGB(255, 255, 255)
-
-local _E_TBL = {}
-
--- [FUNÇÃO WALL CHECK]
+-- [RAIO DE VISIBILIDADE]
 local function _RAY_CH(_T_PRT)
     local _CHAR = _L.Character
     if not _CHAR then return false end
@@ -38,13 +31,27 @@ local function _RAY_CH(_T_PRT)
     return _RE == nil or _RE.Instance:IsDescendantOf(_T_PRT.Parent)
 end
 
--- [RANDOMIZAÇÃO DE ALVO]
+-- [RANDOMIZAÇÃO]
 local function _GET_RND_POS(_POS)
     local _J = _DATA.Aimbot.Jitter
     return _POS + Vector3.new(math.random(-_J, _J), math.random(-_J, _J), math.random(-_J, _J))
 end
 
--- [BUSCA DE ALVO OTIMIZADA]
+-- [DETECTAR ENTRADA DO CONTROLE]
+_U.InputBegan:Connect(function(input)
+    -- ButtonL2 é o gatilho de mirar no controle
+    if input.KeyCode == _DATA.Aimbot.ActiveKey then
+        _DATA.Aimbot.IsPressed = true
+    end
+end)
+
+_U.InputEnded:Connect(function(input)
+    if input.KeyCode == _DATA.Aimbot.ActiveKey then
+        _DATA.Aimbot.IsPressed = false
+    end
+end)
+
+-- [BUSCA DE ALVO]
 local function _GET_TARGET()
     local _T = nil
     local _SD = _DATA.Aimbot.FOV
@@ -57,7 +64,9 @@ local function _GET_TARGET()
                 if _DIST <= _DATA.Aimbot.MaxDistance then
                     local _VPOS, _OS = _C:WorldToViewportPoint(_PRT.Position)
                     if _OS then
-                        local _M_D = (Vector2.new(_VPOS.X, _VPOS.Y) - _U:GetMouseLocation()).Magnitude
+                        -- No controle, usamos o centro da tela como referência para o FOV
+                        local _SCREEN_CENTER = Vector2.new(_C.ViewportSize.X / 2, _C.ViewportSize.Y / 2)
+                        local _M_D = (Vector2.new(_VPOS.X, _VPOS.Y) - _SCREEN_CENTER).Magnitude
                         if _M_D < _SD and _RAY_CH(_PRT) then
                             _SD = _M_D
                             _T = _PRT
@@ -70,96 +79,25 @@ local function _GET_TARGET()
     return _T
 end
 
--- [INTERFACE GRÁFICA]
-local UI = Instance.new("ScreenGui", game:GetService("CoreGui"))
-local Main = Instance.new("Frame", UI)
-Main.Size = UDim2.new(0, 320, 0, 450)
-Main.Position = UDim2.new(0.5, -160, 0.5, -225)
-Main.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-Main.Active = true
-Main.Draggable = true
-Instance.new("UICorner", Main)
-
-local Title = Instance.new("TextLabel", Main)
-Title.Size = UDim2.new(1, 0, 0, 40)
-Title.Text = "BIELZINN HUB | PRO SECURE"
-Title.TextColor3 = Color3.new(1,1,1)
-Title.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-Title.Font = Enum.Font.GothamBold
-Instance.new("UICorner", Title)
-
-local function NewBtn(txt, pos, color, callback)
-    local b = Instance.new("TextButton", Main)
-    b.Size = UDim2.new(1, -40, 0, 35)
-    b.Position = pos
-    b.Text = txt
-    b.BackgroundColor3 = color
-    b.TextColor3 = Color3.new(1,1,1)
-    b.Font = Enum.Font.GothamBold
-    Instance.new("UICorner", b)
-    b.MouseButton1Click:Connect(callback)
-    return b
-end
-
--- Botões de Ativação
-local AimBtn = NewBtn("AIMBOT: OFF", UDim2.new(0, 20, 0, 50), Color3.fromRGB(40, 40, 40), function()
-    _DATA.Aimbot.Enabled = not _DATA.Aimbot.Enabled
-end)
-
-local PartBtn = NewBtn("ALVO: CABEÇA", UDim2.new(0, 20, 0, 95), Color3.fromRGB(40, 40, 40), function()
-    _DATA.Aimbot.TargetPart = (_DATA.Aimbot.TargetPart == "Head" and "HumanoidRootPart" or "Head")
-end)
-
-local FovShowBtn = NewBtn("VER CÍRCULO: OFF", UDim2.new(0, 20, 0, 140), Color3.fromRGB(40, 40, 40), function()
-    _DATA.Aimbot.ShowFOV = not _DATA.Aimbot.ShowFOV
-end)
-
--- Controles de Tamanho do FOV
-local FovLabel = Instance.new("TextLabel", Main)
-FovLabel.Size = UDim2.new(1, 0, 0, 30)
-FovLabel.Position = UDim2.new(0, 0, 0, 185)
-FovLabel.Text = "AJUSTE DE FOV: " .. _DATA.Aimbot.FOV
-FovLabel.TextColor3 = Color3.new(1,1,1)
-FovLabel.BackgroundTransparency = 1
-FovLabel.Font = Enum.Font.Gotham
-
-local FovMenos = NewBtn("-", UDim2.new(0, 60, 0, 215), Color3.fromRGB(150, 50, 50), function()
-    _DATA.Aimbot.FOV = math.max(10, _DATA.Aimbot.FOV - 10)
-end)
-FovMenos.Size = UDim2.new(0, 80, 0, 35)
-
-local FovMais = NewBtn("+", UDim2.new(0, 180, 0, 215), Color3.fromRGB(50, 100, 150), function()
-    _DATA.Aimbot.FOV = math.min(800, _DATA.Aimbot.FOV + 10)
-end)
-FovMais.Size = UDim2.new(0, 80, 0, 35)
-
 -- [LOOP PRINCIPAL]
 _R.RenderStepped:Connect(function()
-    -- Atualização Visual da UI
-    AimBtn.Text = "AIMBOT: " .. (_DATA.Aimbot.Enabled and "ON" or "OFF")
-    AimBtn.BackgroundColor3 = _DATA.Aimbot.Enabled and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(40, 40, 40)
-    PartBtn.Text = "ALVO: " .. (_DATA.Aimbot.TargetPart == "Head" and "CABEÇA" or "PEITO")
-    FovShowBtn.Text = "VER CÍRCULO: " .. (_DATA.Aimbot.ShowFOV and "ON" or "OFF")
-    FovLabel.Text = "AJUSTE DE FOV: " .. _DATA.Aimbot.FOV
-    
-    -- FOV Desenho
-    _FOV_CIRC.Visible = _DATA.Aimbot.ShowFOV
-    _FOV_CIRC.Radius = _DATA.Aimbot.FOV
-    _FOV_CIRC.Position = _U:GetMouseLocation()
-
-    -- Aimbot Suave com Randomização
-    if _DATA.Aimbot.Enabled then
+    -- No controle, o Aimbot só ativado se estiver mirando com L2/LT
+    if _DATA.Aimbot.Enabled and _DATA.Aimbot.IsPressed then
         local _TARGET = _GET_TARGET()
         if _TARGET then
             local _T_POS = _GET_RND_POS(_TARGET.Position)
             local _LOOK = CFrame.new(_C.CFrame.Position, _T_POS)
-            -- [SUAVIZAÇÃO - LERP]
             _C.CFrame = _C.CFrame:Lerp(_LOOK, _DATA.Aimbot.Smoothness)
         end
     end
 end)
 
--- Atalho para fechar/abrir menu
+-- Interface adaptada para controle (Atalho: D-Pad Up / Seta para Cima)
 _U.InputBegan:Connect(function(i)
-    if i.KeyCode == Enum.KeyCode.RightShift then Main.Visible = not Main.Visible end
+    if i.KeyCode == Enum.KeyCode.DPadUp then
+        local UI_Main = game:GetService("CoreGui"):FindFirstChild("ScreenGui")
+        if UI_Main then
+            UI_Main.Enabled = not UI_Main.Enabled
+        end
+    end
 end)
