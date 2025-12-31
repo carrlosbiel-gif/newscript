@@ -60,6 +60,7 @@ local function CreateESP(Player)
 end
 
 -- Atualizar ESP
+-- Atualizar ESP com Cor Dinâmica por Vida
 local function UpdateESP(Player, Objects)
     local Char = Player.Character
     local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
@@ -74,13 +75,21 @@ local function UpdateESP(Player, Objects)
     if OnScreen then
         local Dist = (Camera.CFrame.Position - Root.Position).Magnitude
         local Scale = 1000 / Dist
+        
+        -- CÁLCULO DA COR PELA VIDA
+        -- Vida / Vida Máxima (ex: 50/100 = 0.5)
+        local healthPercent = Hum.Health / Hum.MaxHealth
+        -- Interpola de Vermelho (0) para Verde (1)
+        local dynamicColor = Color3.fromHSV(healthPercent * 0.3, 1, 1) 
+
         Objects.Box.Size = Vector2.new(Scale, Scale * 1.5)
         Objects.Box.Position = Vector2.new(Pos.X - Scale/2, Pos.Y - Scale/0.75)
-        Objects.Box.Color = Settings.ESP.BoxColor
+        Objects.Box.Color = dynamicColor -- Aplica a cor da vida
         Objects.Box.Visible = true
         
-        Objects.Distance.Text = math.floor(Dist) .. "m"
+        Objects.Distance.Text = math.floor(Dist) .. "m [" .. math.floor(Hum.Health) .. " HP]"
         Objects.Distance.Position = Vector2.new(Pos.X, Objects.Box.Position.Y + Objects.Box.Size.Y + 5)
+        Objects.Distance.Color = dynamicColor
         Objects.Distance.Visible = true
     else
         for _, obj in pairs(Objects) do obj.Visible = false end
