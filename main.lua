@@ -1,167 +1,203 @@
-local Plrs = game:GetService("Players")
-local RS = game:GetService("RunService")
-local UIS = game:GetService("UserInputService")
-local LP = Plrs.LocalPlayer
-local Cam = workspace.CurrentCamera
+local _P = game:GetService("Players")
+local _R = game:GetService("RunService")
+local _U = game:GetService("UserInputService")
+local _L = _P.LocalPlayer
+local _C = workspace.CurrentCamera
 
-local SecureConfig = {
+local _DATA = {
+    ESP = { Enabled = false, TeamCheck = false },
     Aimbot = {
-        Active = false,
+        Enabled = false,
+        TeamCheck = false,
         FOV = 150,
-        Smooth = 0.12, 
-        Part = "Head",
-        Dist = 500,
-        WallCheck = true,
-        IgnoreTeam = true -- [NOVO] Ignorar aliados ativado
-    },
-    Visuals = {
-        BoxEnabled = false,
-        SecureColor = Color3.fromRGB(0, 255, 120),
-        EnemyColor = Color3.fromRGB(255, 50, 50) -- Cor para inimigos
+        ShowFOV = false,
+        TargetPart = "Head",
+        MaxDistance = 500,
+        Smoothness = 0.15, -- [SUAVIZAÇÃO] 0.1 a 1 (menor é mais suave)
+        Jitter = 0.3 -- [RANDOMIZAÇÃO] Variação aleatória do alvo
     }
 }
 
--- [RAIO DE VISIBILIDADE]
-local function IsBehindWall(TargetPart)
-    local Character = LP.Character
-    if not Character then return true end
-    local Origin = Cam.CFrame.Position
-    local Destination = TargetPart.Position
-    local Direction = (Destination - Origin).Unit * (Destination - Origin).Magnitude
-    local RayParams = RaycastParams.new()
-    RayParams.FilterDescendantsInstances = {Character, Cam}
-    RayParams.FilterType = Enum.RaycastFilterType.Exclude
-    local Result = workspace:Raycast(Origin, Direction, RayParams)
+local _FOV_CIRC = Drawing.new("Circle")
+_FOV_CIRC.Thickness = 1
+_FOV_CIRC.NumSides = 100
+_FOV_CIRC.Radius = _DATA.Aimbot.FOV
+_FOV_CIRC.Filled = false
+_FOV_CIRC.Visible = false
+_FOV_CIRC.Color = Color3.fromRGB(255, 255, 255)
+
+local _E_TBL = {}
+
+-- Função de Verificação de Visão camuflada
+local function _RAY_CH(_T_PRT)
+    local _CHAR = _L.Character
+    if not _CHAR then return false end
+    local _OR = _C.CFrame.Position
+    local _DE = _T_PRT.Position
+    local _DI = (_DE - _OR).Unit * (_DE - _OR).Magnitude
+    local _RP = RaycastParams.new()
+    _RP.FilterDescendantsInstances = {_CHAR, _C}
+    _RP.FilterType = Enum.RaycastFilterType.Exclude
+    local _RE = workspace:Raycast(_OR, _DI, _RP)
+    return _RE == nil or _RE.Instance:IsDescendantOf(_T_PRT.Parent)
+end
+
+-- [RANDOMIZAÇÃO] Gera um ponto aleatório próximo ao alvo
+local function _GET_RND_POS(_POS)
+    local _J = _DATA.Aimbot.Jitter
+    return _POS + Vector3.new(
+        math.random(-_J, _J),
+        math.random(-_J, _J),
+        math.random(-_J, _J)
+    )
+end
+
+local function CreateESP(Player)
+    if Player == _L then return end
+    local Objects = {
+        Box = Drawing.new("Square"),
+        Distance = Drawing.new("Text")
+    }
+    Objects.Box.Thickness = 1
+    Objects.Box.Filled = false
+    Objects.Distance.Size = 14
+    Objects.Distance.Center = true
+    Objects.Distance.Outline = true
+    _E_TBL[Player] = Objects
+end
+
+local function UpdateESP(Player, Objects)
+    local Char = Player.Character
+    local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+    local Root = Char and Char:FindFirstChild("HumanoidRootPart")
+
+    if not _DATA.ESP.Enabled or not Root or not Hum or Hum.Health <= 0 then
+        for _, obj in pairs(Objects) do obj.Visible = false end
+        return
+    end
+
+    local Dist = (_C.CFrame.Position - Root.Position).Magnitude
+    if Dist > 500 then
+        for _, obj in pairs(Objects) do obj.Visible = false end
+        return
+    end
+
+    local Pos, OnScreen = _C:WorldToViewportPoint(Root.Position)
     
-    if Result == nil then return false end
-    if Result.Instance:IsDescendantOf(TargetPart.Parent) then return false end
-    return true
-end
-
-local FOV_Ring = Drawing.new("Circle")
-FOV_Ring.Visible = false
-FOV_Ring.Thickness = 1
-FOV_Ring.Radius = SecureConfig.Aimbot.FOV
-FOV_Ring.Color = Color3.new(1, 1, 1)
-
-local Cache_ESP = {}
-
-local function CreateSecureBox(P)
-    local Box = Drawing.new("Square")
-    Box.Visible = false
-    Box.Color = SecureConfig.Visuals.SecureColor
-    Box.Thickness = 1
-    Box.Filled = false
-    Cache_ESP[P] = Box
-end
-
--- [ATUALIZAÇÃO VISUAL COM TEAM CHECK]
-local function UpdateVisuals()
-    for p, box in pairs(Cache_ESP) do
-        -- Verifica se o jogador deve ser mostrado (Ignora se for aliado e o check estiver ligado)
-        local isAlly = (p.Team == LP.Team and p.Team ~= nil)
+    if OnScreen then
+        local Scale = 1000 / Dist
+        Objects.Box.Size = Vector2.new(Scale, Scale * 1.5)
+        Objects.Box.Position = Vector2.new(Pos.X - Scale/2, Pos.Y - Scale/0.75)
+        Objects.Box.Color = Color3.fromHSV((Hum.Health / Hum.MaxHealth) * 0.3, 1, 1)
+        Objects.Box.Visible = true
         
-        if SecureConfig.Visuals.BoxEnabled and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            if SecureConfig.Aimbot.IgnoreTeam and isAlly then
-                box.Visible = false
-            else
-                local Root = p.Character.HumanoidRootPart
-                local Pos, OnScreen = Cam:WorldToViewportPoint(Root.Position)
-                
-                if OnScreen then
-                    local Dist = (Cam.CFrame.Position - Root.Position).Magnitude
-                    if Dist < SecureConfig.Aimbot.Dist then
-                        local Size = 1000 / Dist
-                        box.Size = Vector2.new(Size, Size * 1.5)
-                        box.Position = Vector2.new(Pos.X - Size/2, Pos.Y - Size/1.5)
-                        box.Color = isAlly and SecureConfig.Visuals.SecureColor or SecureConfig.Visuals.EnemyColor
-                        box.Visible = true
-                    else box.Visible = false end
-                else box.Visible = false end
-            end
-        else box.Visible = false end
+        Objects.Distance.Text = math.floor(Dist) .. "m"
+        Objects.Distance.Position = Vector2.new(Pos.X, Objects.Box.Position.Y + Objects.Box.Size.Y + 2)
+        Objects.Distance.Visible = true
+    else
+        for _, obj in pairs(Objects) do obj.Visible = false end
     end
 end
 
--- [BUSCA DE ALVO COM TEAM CHECK]
-local function GetClosestTarget()
-    local t = nil
-    local sd = SecureConfig.Aimbot.FOV
-    for _, v in pairs(Plrs:GetPlayers()) do
-        if v ~= LP and v.Character and v.Character:FindFirstChild(SecureConfig.Aimbot.Part) then
+local function _GET_TARGET()
+    local _T = nil
+    local _SD = _DATA.Aimbot.FOV
+    for _, _P_OBJ in pairs(_P:GetPlayers()) do
+        if _P_OBJ ~= _L and _P_OBJ.Character and _P_OBJ.Character:FindFirstChild(_DATA.Aimbot.TargetPart) then
+            local _PRT = _P_OBJ.Character[_DATA.Aimbot.TargetPart]
+            local _RT = _P_OBJ.Character.HumanoidRootPart
+            local _D_REAL = (_L.Character.HumanoidRootPart.Position - _RT.Position).Magnitude
             
-            -- VERIFICA SE É ALIADO
-            local isAlly = (v.Team == LP.Team and v.Team ~= nil)
-            
-            -- Só mira se NÃO for aliado (ou se o TeamCheck estiver desligado)
-            if not (SecureConfig.Aimbot.IgnoreTeam and isAlly) then
-                local P = v.Character[SecureConfig.Aimbot.Part]
-                if not IsBehindWall(P) then
-                    local Pos, OnScreen = Cam:WorldToViewportPoint(P.Position)
-                    if OnScreen then
-                        local m = (Vector2.new(Pos.X, Pos.Y) - UIS:GetMouseLocation()).Magnitude
-                        if m < sd then
-                            sd = m
-                            t = P
-                        end
+            if _D_REAL <= _DATA.Aimbot.MaxDistance then
+                local _VPOS, _OS = _C:WorldToViewportPoint(_PRT.Position)
+                if _OS then
+                    local _M_POS = _U:GetMouseLocation()
+                    local _D_FOV = (Vector2.new(_VPOS.X, _VPOS.Y) - _M_POS).Magnitude
+                    if _D_FOV < _SD and _RAY_CH(_PRT) then
+                        _SD = _D_FOV
+                        _T = _PRT
                     end
                 end
             end
         end
     end
-    return t
+    return _T
 end
 
-RS.RenderStepped:Connect(function()
-    UpdateVisuals()
-    FOV_Ring.Position = UIS:GetMouseLocation()
-    if SecureConfig.Aimbot.Active then
-        local Alvo = GetClosestTarget()
-        if Alvo then
-            local Look = CFrame.new(Cam.CFrame.Position, Alvo.Position)
-            Cam.CFrame = Cam.CFrame:Lerp(Look, SecureConfig.Aimbot.Smooth)
-        end
-    end
-end)
+-- Interface Original com ajustes
+local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 350, 0, 560)
+MainFrame.Position = UDim2.new(0.5, -175, 0.5, -280)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.Active = true
+MainFrame.Draggable = true
+Instance.new("UICorner", MainFrame)
 
-for _, p in pairs(Plrs:GetPlayers()) do if p ~= LP then CreateSecureBox(p) end end
-Plrs.PlayerAdded:Connect(CreateSecureBox)
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.Text = "BIELZINN HUB | SECURE V3"
+Title.TextColor3 = Color3.new(1,1,1)
+Title.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+Title.Font = Enum.Font.GothamBold
+Instance.new("UICorner", Title)
 
---- [ INTERFACE ] ---
-local UI = Instance.new("ScreenGui", game:GetService("CoreGui"))
-local F = Instance.new("Frame", UI)
-F.Size = UDim2.new(0, 180, 0, 140)
-F.Position = UDim2.new(0.05, 0, 0.4, 0)
-F.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-F.Active = true
-F.Draggable = true
-Instance.new("UICorner", F)
+local Content = Instance.new("Frame", MainFrame)
+Content.Size = UDim2.new(1, 0, 1, -40)
+Content.Position = UDim2.new(0, 0, 0, 40)
+Content.BackgroundTransparency = 1
 
-local function AddBtn(txt, pos, callback)
-    local b = Instance.new("TextButton", F)
-    b.Size = UDim2.new(1, -20, 0, 35)
+local function NewBtn(txt, pos, color, callback)
+    local b = Instance.new("TextButton", Content)
+    b.Size = UDim2.new(0, 310, 0, 35)
     b.Position = pos
     b.Text = txt
-    b.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    b.BackgroundColor3 = color
     b.TextColor3 = Color3.new(1,1,1)
+    b.Font = Enum.Font.GothamBold
     Instance.new("UICorner", b)
-    b.MouseButton1Click:Connect(function() callback(b) end)
+    b.MouseButton1Click:Connect(callback)
+    return b
 end
 
-AddBtn("AIMBOT: OFF", UDim2.new(0, 10, 0, 10), function(b)
-    SecureConfig.Aimbot.Active = not SecureConfig.Aimbot.Active
-    b.Text = "AIMBOT: " .. (SecureConfig.Aimbot.Active and "ON" or "OFF")
-    b.BackgroundColor3 = SecureConfig.Aimbot.Active and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(40, 40, 40)
+local AimBtn = NewBtn("Aimbot: OFF", UDim2.new(0, 20, 0, 10), Color3.fromRGB(30, 30, 30), function()
+    _DATA.Aimbot.Enabled = not _DATA.Aimbot.Enabled
 end)
 
-AddBtn("ESP BOX: OFF", UDim2.new(0, 10, 0, 50), function(b)
-    SecureConfig.Visuals.BoxEnabled = not SecureConfig.Visuals.BoxEnabled
-    b.Text = "ESP BOX: " .. (SecureConfig.Visuals.BoxEnabled and "ON" or "OFF")
-    b.BackgroundColor3 = SecureConfig.Visuals.BoxEnabled and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(40, 40, 40)
+local EspBtn = NewBtn("ESP: OFF", UDim2.new(0, 20, 0, 50), Color3.fromRGB(30, 30, 30), function()
+    _DATA.ESP.Enabled = not _DATA.ESP.Enabled
 end)
 
-AddBtn("TEAM CHECK: ON", UDim2.new(0, 10, 0, 90), function(b)
-    SecureConfig.Aimbot.IgnoreTeam = not SecureConfig.Aimbot.IgnoreTeam
-    b.Text = "TEAM CHECK: " .. (SecureConfig.Aimbot.IgnoreTeam and "ON" or "OFF")
-    b.BackgroundColor3 = SecureConfig.Aimbot.IgnoreTeam and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(40, 40, 40)
+-- Loop principal atualizado com LERP e JITTER
+_R.RenderStepped:Connect(function()
+    _FOV_CIRC.Radius = _DATA.Aimbot.FOV
+    _FOV_CIRC.Visible = _DATA.Aimbot.ShowFOV
+    _FOV_CIRC.Position = _U:GetMouseLocation()
+
+    if _DATA.Aimbot.Enabled then
+        local _TARGET = _GET_TARGET()
+        if _TARGET then
+            -- [RANDOMIZAÇÃO]
+            local _TARGET_POS = _GET_RND_POS(_TARGET.Position)
+            
+            -- [SUAVIZAÇÃO] Usa Lerp para mover a câmera suavemente
+            local _LOOK_AT = CFrame.new(_C.CFrame.Position, _TARGET_POS)
+            _C.CFrame = _C.CFrame:Lerp(_LOOK_AT, _DATA.Aimbot.Smoothness)
+        end
+    end
+    
+    for P, O in pairs(_E_TBL) do UpdateESP(P, O) end
+    
+    -- Atualizar textos da UI
+    AimBtn.Text = "Aimbot: " .. (_DATA.Aimbot.Enabled and "ON" or "OFF")
+    AimBtn.BackgroundColor3 = _DATA.Aimbot.Enabled and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(30, 30, 30)
+    EspBtn.Text = "ESP: " .. (_DATA.ESP.Enabled and "ON" or "OFF")
+    EspBtn.BackgroundColor3 = _DATA.ESP.Enabled and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(30, 30, 30)
+end)
+
+for _, p in pairs(_P:GetPlayers()) do CreateESP(p) end
+_P.PlayerAdded:Connect(CreateESP)
+
+_U.InputBegan:Connect(function(i)
+    if i.KeyCode == Enum.KeyCode.RightShift then MainFrame.Visible = not MainFrame.Visible end
 end)
