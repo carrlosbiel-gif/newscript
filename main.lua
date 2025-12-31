@@ -4,21 +4,45 @@ local UIS = game:GetService("UserInputService")
 local LP = Plrs.LocalPlayer
 local Cam = workspace.CurrentCamera
 
--- Configurações Camufladas
 local SecureConfig = {
     Aimbot = {
         Active = false,
         FOV = 150,
-        Smooth = 0.12, -- Suavização para parecer humano
+        Smooth = 0.12, 
         Part = "Head",
-        Dist = 500
+        Dist = 500,
+        WallCheck = true -- [ATIVADO] Agora ele ignora paredes
     },
     Visuals = {
         BoxEnabled = false,
-        TeamCheck = true,
         SecureColor = Color3.fromRGB(0, 255, 120)
     }
 }
+
+-- [FUNÇÃO RAYCAST] - Verifica se existe algo entre você e o inimigo
+local function IsBehindWall(TargetPart)
+    local Character = LP.Character
+    if not Character then return true end
+    
+    local Origin = Cam.CFrame.Position
+    local Destination = TargetPart.Position
+    local Direction = (Destination - Origin).Unit * (Destination - Origin).Magnitude
+    
+    local RayParams = RaycastParams.new()
+    RayParams.FilterDescendantsInstances = {Character, Cam} -- Ignora você mesmo e a câmera
+    RayParams.FilterType = Enum.RaycastFilterType.Exclude
+    
+    local Result = workspace:Raycast(Origin, Direction, RayParams)
+    
+    -- Se o raio não bater em nada ou bater no próprio inimigo, ele está visível
+    if Result == nil then
+        return false -- Não tem parede
+    elseif Result.Instance:IsDescendantOf(TargetPart.Parent) then
+        return false -- O que ele atingiu foi o inimigo
+    end
+    
+    return true -- Tem parede no caminho
+end
 
 local FOV_Ring = Drawing.new("Circle")
 FOV_Ring.Visible = false
@@ -28,7 +52,6 @@ FOV_Ring.Color = Color3.new(1, 1, 1)
 
 local Cache_ESP = {}
 
--- Criar Box Seguro
 local function CreateSecureBox(P)
     local Box = Drawing.new("Square")
     Box.Visible = false
@@ -38,15 +61,13 @@ local function CreateSecureBox(P)
     Cache_ESP[P] = Box
 end
 
--- Lógica do ESP (Box)
 local function UpdateVisuals()
     for p, box in pairs(Cache_ESP) do
-        if SecureConfig.Visuals.BoxEnabled and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") then
-            local Hum = p.Character.Humanoid
+        if SecureConfig.Visuals.BoxEnabled and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
             local Root = p.Character.HumanoidRootPart
             local Pos, OnScreen = Cam:WorldToViewportPoint(Root.Position)
             
-            if OnScreen and Hum.Health > 0 then
+            if OnScreen then
                 local Dist = (Cam.CFrame.Position - Root.Position).Magnitude
                 if Dist < SecureConfig.Aimbot.Dist then
                     local Size = 1000 / Dist
@@ -65,19 +86,22 @@ local function UpdateVisuals()
     end
 end
 
--- Função de Alvo (Otimizada)
 local function GetClosestTarget()
     local t = nil
     local sd = SecureConfig.Aimbot.FOV
     for _, v in pairs(Plrs:GetPlayers()) do
         if v ~= LP and v.Character and v.Character:FindFirstChild(SecureConfig.Aimbot.Part) then
             local P = v.Character[SecureConfig.Aimbot.Part]
-            local Pos, OnScreen = Cam:WorldToViewportPoint(P.Position)
-            if OnScreen then
-                local m = (Vector2.new(Pos.X, Pos.Y) - UIS:GetMouseLocation()).Magnitude
-                if m < sd then
-                    sd = m
-                    t = P
+            
+            -- SÓ PROSSEGUE SE NÃO ESTIVER ATRÁS DA PAREDE
+            if not IsBehindWall(P) then
+                local Pos, OnScreen = Cam:WorldToViewportPoint(P.Position)
+                if OnScreen then
+                    local m = (Vector2.new(Pos.X, Pos.Y) - UIS:GetMouseLocation()).Magnitude
+                    if m < sd then
+                        sd = m
+                        t = P
+                    end
                 end
             end
         end
@@ -85,7 +109,6 @@ local function GetClosestTarget()
     return t
 end
 
--- Loop Principal Unificado
 RS.RenderStepped:Connect(function()
     UpdateVisuals()
     FOV_Ring.Position = UIS:GetMouseLocation()
@@ -93,18 +116,16 @@ RS.RenderStepped:Connect(function()
     if SecureConfig.Aimbot.Active then
         local Alvo = GetClosestTarget()
         if Alvo then
-            -- Movimento suave (Lerp) para não dar "snap"
             local Look = CFrame.new(Cam.CFrame.Position, Alvo.Position)
             Cam.CFrame = Cam.CFrame:Lerp(Look, SecureConfig.Aimbot.Smooth)
         end
     end
 end)
 
--- Gerenciamento de Jogadores
 for _, p in pairs(Plrs:GetPlayers()) do if p ~= LP then CreateSecureBox(p) end end
 Plrs.PlayerAdded:Connect(CreateSecureBox)
 
---- [ INTERFACE COMPACTA ] ---
+--- [ INTERFACE ] ---
 local UI = Instance.new("ScreenGui", game:GetService("CoreGui"))
 local F = Instance.new("Frame", UI)
 F.Size = UDim2.new(0, 180, 0, 100)
