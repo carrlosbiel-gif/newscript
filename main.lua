@@ -11,37 +11,31 @@ local SecureConfig = {
         Smooth = 0.12, 
         Part = "Head",
         Dist = 500,
-        WallCheck = true -- [ATIVADO] Agora ele ignora paredes
+        WallCheck = true,
+        IgnoreTeam = true -- [NOVO] Ignorar aliados ativado
     },
     Visuals = {
         BoxEnabled = false,
-        SecureColor = Color3.fromRGB(0, 255, 120)
+        SecureColor = Color3.fromRGB(0, 255, 120),
+        EnemyColor = Color3.fromRGB(255, 50, 50) -- Cor para inimigos
     }
 }
 
--- [FUNÇÃO RAYCAST] - Verifica se existe algo entre você e o inimigo
+-- [RAIO DE VISIBILIDADE]
 local function IsBehindWall(TargetPart)
     local Character = LP.Character
     if not Character then return true end
-    
     local Origin = Cam.CFrame.Position
     local Destination = TargetPart.Position
     local Direction = (Destination - Origin).Unit * (Destination - Origin).Magnitude
-    
     local RayParams = RaycastParams.new()
-    RayParams.FilterDescendantsInstances = {Character, Cam} -- Ignora você mesmo e a câmera
+    RayParams.FilterDescendantsInstances = {Character, Cam}
     RayParams.FilterType = Enum.RaycastFilterType.Exclude
-    
     local Result = workspace:Raycast(Origin, Direction, RayParams)
     
-    -- Se o raio não bater em nada ou bater no próprio inimigo, ele está visível
-    if Result == nil then
-        return false -- Não tem parede
-    elseif Result.Instance:IsDescendantOf(TargetPart.Parent) then
-        return false -- O que ele atingiu foi o inimigo
-    end
-    
-    return true -- Tem parede no caminho
+    if Result == nil then return false end
+    if Result.Instance:IsDescendantOf(TargetPart.Parent) then return false end
+    return true
 end
 
 local FOV_Ring = Drawing.new("Circle")
@@ -61,46 +55,55 @@ local function CreateSecureBox(P)
     Cache_ESP[P] = Box
 end
 
+-- [ATUALIZAÇÃO VISUAL COM TEAM CHECK]
 local function UpdateVisuals()
     for p, box in pairs(Cache_ESP) do
+        -- Verifica se o jogador deve ser mostrado (Ignora se for aliado e o check estiver ligado)
+        local isAlly = (p.Team == LP.Team and p.Team ~= nil)
+        
         if SecureConfig.Visuals.BoxEnabled and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local Root = p.Character.HumanoidRootPart
-            local Pos, OnScreen = Cam:WorldToViewportPoint(Root.Position)
-            
-            if OnScreen then
-                local Dist = (Cam.CFrame.Position - Root.Position).Magnitude
-                if Dist < SecureConfig.Aimbot.Dist then
-                    local Size = 1000 / Dist
-                    box.Size = Vector2.new(Size, Size * 1.5)
-                    box.Position = Vector2.new(Pos.X - Size/2, Pos.Y - Size/1.5)
-                    box.Visible = true
-                else
-                    box.Visible = false
-                end
-            else
+            if SecureConfig.Aimbot.IgnoreTeam and isAlly then
                 box.Visible = false
+            else
+                local Root = p.Character.HumanoidRootPart
+                local Pos, OnScreen = Cam:WorldToViewportPoint(Root.Position)
+                
+                if OnScreen then
+                    local Dist = (Cam.CFrame.Position - Root.Position).Magnitude
+                    if Dist < SecureConfig.Aimbot.Dist then
+                        local Size = 1000 / Dist
+                        box.Size = Vector2.new(Size, Size * 1.5)
+                        box.Position = Vector2.new(Pos.X - Size/2, Pos.Y - Size/1.5)
+                        box.Color = isAlly and SecureConfig.Visuals.SecureColor or SecureConfig.Visuals.EnemyColor
+                        box.Visible = true
+                    else box.Visible = false end
+                else box.Visible = false end
             end
-        else
-            box.Visible = false
-        end
+        else box.Visible = false end
     end
 end
 
+-- [BUSCA DE ALVO COM TEAM CHECK]
 local function GetClosestTarget()
     local t = nil
     local sd = SecureConfig.Aimbot.FOV
     for _, v in pairs(Plrs:GetPlayers()) do
         if v ~= LP and v.Character and v.Character:FindFirstChild(SecureConfig.Aimbot.Part) then
-            local P = v.Character[SecureConfig.Aimbot.Part]
             
-            -- SÓ PROSSEGUE SE NÃO ESTIVER ATRÁS DA PAREDE
-            if not IsBehindWall(P) then
-                local Pos, OnScreen = Cam:WorldToViewportPoint(P.Position)
-                if OnScreen then
-                    local m = (Vector2.new(Pos.X, Pos.Y) - UIS:GetMouseLocation()).Magnitude
-                    if m < sd then
-                        sd = m
-                        t = P
+            -- VERIFICA SE É ALIADO
+            local isAlly = (v.Team == LP.Team and v.Team ~= nil)
+            
+            -- Só mira se NÃO for aliado (ou se o TeamCheck estiver desligado)
+            if not (SecureConfig.Aimbot.IgnoreTeam and isAlly) then
+                local P = v.Character[SecureConfig.Aimbot.Part]
+                if not IsBehindWall(P) then
+                    local Pos, OnScreen = Cam:WorldToViewportPoint(P.Position)
+                    if OnScreen then
+                        local m = (Vector2.new(Pos.X, Pos.Y) - UIS:GetMouseLocation()).Magnitude
+                        if m < sd then
+                            sd = m
+                            t = P
+                        end
                     end
                 end
             end
@@ -112,7 +115,6 @@ end
 RS.RenderStepped:Connect(function()
     UpdateVisuals()
     FOV_Ring.Position = UIS:GetMouseLocation()
-    
     if SecureConfig.Aimbot.Active then
         local Alvo = GetClosestTarget()
         if Alvo then
@@ -128,7 +130,7 @@ Plrs.PlayerAdded:Connect(CreateSecureBox)
 --- [ INTERFACE ] ---
 local UI = Instance.new("ScreenGui", game:GetService("CoreGui"))
 local F = Instance.new("Frame", UI)
-F.Size = UDim2.new(0, 180, 0, 100)
+F.Size = UDim2.new(0, 180, 0, 140)
 F.Position = UDim2.new(0.05, 0, 0.4, 0)
 F.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 F.Active = true
@@ -152,8 +154,14 @@ AddBtn("AIMBOT: OFF", UDim2.new(0, 10, 0, 10), function(b)
     b.BackgroundColor3 = SecureConfig.Aimbot.Active and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(40, 40, 40)
 end)
 
-AddBtn("ESP BOX: OFF", UDim2.new(0, 10, 0, 55), function(b)
+AddBtn("ESP BOX: OFF", UDim2.new(0, 10, 0, 50), function(b)
     SecureConfig.Visuals.BoxEnabled = not SecureConfig.Visuals.BoxEnabled
     b.Text = "ESP BOX: " .. (SecureConfig.Visuals.BoxEnabled and "ON" or "OFF")
     b.BackgroundColor3 = SecureConfig.Visuals.BoxEnabled and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(40, 40, 40)
+end)
+
+AddBtn("TEAM CHECK: ON", UDim2.new(0, 10, 0, 90), function(b)
+    SecureConfig.Aimbot.IgnoreTeam = not SecureConfig.Aimbot.IgnoreTeam
+    b.Text = "TEAM CHECK: " .. (SecureConfig.Aimbot.IgnoreTeam and "ON" or "OFF")
+    b.BackgroundColor3 = SecureConfig.Aimbot.IgnoreTeam and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(40, 40, 40)
 end)
