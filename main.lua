@@ -16,7 +16,7 @@ local Settings = {
     },
     Aimbot = {
         Enabled = false,
-        TeamCheck = true, -- NOVO: Ignora aliados na Mira
+        TeamCheck = false, -- NOVO: Ignora aliados na Mira
         FOV = 100,
         MaxDistance = 500,
         ShowFOV = false,
