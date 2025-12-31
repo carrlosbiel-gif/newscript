@@ -1,11 +1,3 @@
---[[ 
-    BIELZINN HUB V3 - CLT EDITION
-    - ESP Box & Distance (Voltou!)
-    - Aimbot com Wall Check
-    - Imagem CLT e Sistema Minimizar (_)
-    - Botões de ajuste de FOV
-]]
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -16,7 +8,7 @@ local Settings = {
     ESP = {
         Enabled = false,
         TeamCheck = false,
-        BoxColor = Color3.fromRGB(0, 255, 0), -- Verde CLT
+        BoxColor = Color3.fromRGB(0, 255, 0),
     },
     Aimbot = {
         Enabled = false,
@@ -122,16 +114,30 @@ local MainFrame = Instance.new("Frame", ScreenGui)
 MainFrame.Size = UDim2.new(0, 350, 0, 480)
 MainFrame.Position = UDim2.new(0.5, -175, 0.5, -240)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
 Instance.new("UICorner", MainFrame)
+
+-- BACKGROUND IMAGE (A foto que você mandou)
+local BackgroundImg = Instance.new("ImageLabel", MainFrame)
+BackgroundImg.Name = "FundoCLT"
+BackgroundImg.Size = UDim2.new(1, 0, 1, 0) -- Ocupa o painel todo
+BackgroundImg.Position = UDim2.new(0, 0, 0, 0)
+BackgroundImg.Image = "rbxassetid://13247072551" -- O ID da foto que estava no script
+BackgroundImg.BackgroundTransparency = 1
+BackgroundImg.ScaleType = Enum.ScaleType.Stretch
+BackgroundImg.ZIndex = 0 -- Fica atrás de tudo
+Instance.new("UICorner", BackgroundImg)
 
 local Title = Instance.new("TextLabel", MainFrame)
 Title.Size = UDim2.new(1, 0, 0, 40)
 Title.Text = "BIELZINN HUB | CLT V3"
 Title.TextColor3 = Color3.new(1,1,1)
-Title.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Title.BackgroundTransparency = 0.3 -- Leve transparência para ver o fundo
+Title.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 Title.Font = Enum.Font.GothamBold
+Title.ZIndex = 2
 Instance.new("UICorner", Title)
 
 local MinBtn = Instance.new("TextButton", MainFrame)
@@ -140,47 +146,46 @@ MinBtn.Position = UDim2.new(1, -40, 0, 5)
 MinBtn.Text = "_"
 MinBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 MinBtn.TextColor3 = Color3.new(1,1,1)
+MinBtn.ZIndex = 3
 Instance.new("UICorner", MinBtn)
 
-local cltImage = Instance.new("ImageLabel", MainFrame)
-cltImage.Size = UDim2.new(0, 100, 0, 100)
-cltImage.Position = UDim2.new(0.5, -50, 0, 50)
-cltImage.Image = "rbxassetid://13247072551"
-cltImage.BackgroundTransparency = 1
-
 local Content = Instance.new("Frame", MainFrame)
-Content.Size = UDim2.new(1, 0, 1, -160)
-Content.Position = UDim2.new(0, 0, 0, 160)
+Content.Size = UDim2.new(1, 0, 1, -60)
+Content.Position = UDim2.new(0, 0, 0, 60)
 Content.BackgroundTransparency = 1
+Content.ZIndex = 2
 
 local function NewBtn(txt, pos, color)
     local b = Instance.new("TextButton", Content)
-    b.Size = UDim2.new(0, 310, 0, 35)
+    b.Size = UDim2.new(0, 310, 0, 40)
     b.Position = pos
     b.Text = txt
     b.BackgroundColor3 = color
+    b.BackgroundTransparency = 0.2 -- Transparência para ver o fundo CLT
     b.TextColor3 = Color3.new(1,1,1)
-    b.Font = Enum.Font.Gotham
+    b.Font = Enum.Font.GothamBold
+    b.ZIndex = 3
     Instance.new("UICorner", b)
     return b
 end
 
-local AimBtn = NewBtn("Aimbot: OFF", UDim2.new(0, 20, 0, 0), Color3.fromRGB(40, 40, 40))
-local EspBtn = NewBtn("ESP: OFF", UDim2.new(0, 20, 0, 45), Color3.fromRGB(40, 40, 40))
-local FovVisBtn = NewBtn("Ver Círculo: OFF", UDim2.new(0, 20, 0, 90), Color3.fromRGB(40, 40, 40))
+local AimBtn = NewBtn("Aimbot: OFF", UDim2.new(0, 20, 0, 10), Color3.fromRGB(30, 30, 30))
+local EspBtn = NewBtn("ESP: OFF", UDim2.new(0, 20, 0, 60), Color3.fromRGB(30, 30, 30))
+local FovVisBtn = NewBtn("Ver Círculo: OFF", UDim2.new(0, 20, 0, 110), Color3.fromRGB(30, 30, 30))
 
 local DisplayFov = Instance.new("TextLabel", Content)
 DisplayFov.Size = UDim2.new(0, 310, 0, 30)
-DisplayFov.Position = UDim2.new(0, 20, 0, 130)
+DisplayFov.Position = UDim2.new(0, 20, 0, 160)
 DisplayFov.Text = "FOV: " .. Settings.Aimbot.FOV
-DisplayFov.TextColor3 = Color3.fromRGB(0, 255, 255)
+DisplayFov.TextColor3 = Color3.fromRGB(255, 255, 255)
 DisplayFov.BackgroundTransparency = 1
 DisplayFov.Font = Enum.Font.GothamBold
+DisplayFov.ZIndex = 3
 
-local Menos = NewBtn("FOV -10", UDim2.new(0, 20, 0, 165), Color3.fromRGB(150, 50, 50))
-Menos.Size = UDim2.new(0, 150, 0, 35)
-local Mais = NewBtn("FOV +10", UDim2.new(0, 180, 0, 165), Color3.fromRGB(50, 100, 150))
-Mais.Size = UDim2.new(0, 150, 0, 35)
+local Menos = NewBtn("FOV -10", UDim2.new(0, 20, 0, 200), Color3.fromRGB(150, 50, 50))
+Menos.Size = UDim2.new(0, 150, 0, 40)
+local Mais = NewBtn("FOV +10", UDim2.new(0, 180, 0, 200), Color3.fromRGB(50, 100, 150))
+Mais.Size = UDim2.new(0, 150, 0, 40)
 
 -- Lógica Minimizar
 local minimizado = false
@@ -188,7 +193,7 @@ MinBtn.MouseButton1Click:Connect(function()
     minimizado = not minimizado
     MainFrame:TweenSize(minimizado and UDim2.new(0, 350, 0, 40) or UDim2.new(0, 350, 0, 480), "Out", "Quad", 0.3, true)
     Content.Visible = not minimizado
-    cltImage.Visible = not minimizado
+    BackgroundImg.Visible = not minimizado
     MinBtn.Text = minimizado and "+" or "_"
 end)
 
@@ -196,13 +201,13 @@ end)
 AimBtn.MouseButton1Click:Connect(function()
     Settings.Aimbot.Enabled = not Settings.Aimbot.Enabled
     AimBtn.Text = "Aimbot: " .. (Settings.Aimbot.Enabled and "ON" or "OFF")
-    AimBtn.BackgroundColor3 = Settings.Aimbot.Enabled and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(40, 40, 40)
+    AimBtn.BackgroundColor3 = Settings.Aimbot.Enabled and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(30, 30, 30)
 end)
 
 EspBtn.MouseButton1Click:Connect(function()
     Settings.ESP.Enabled = not Settings.ESP.Enabled
     EspBtn.Text = "ESP: " .. (Settings.ESP.Enabled and "ON" or "OFF")
-    EspBtn.BackgroundColor3 = Settings.ESP.Enabled and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(40, 40, 40)
+    EspBtn.BackgroundColor3 = Settings.ESP.Enabled and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(30, 30, 30)
 end)
 
 FovVisBtn.MouseButton1Click:Connect(function()
