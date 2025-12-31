@@ -4,104 +4,135 @@ local UIS = game:GetService("UserInputService")
 local LP = Plrs.LocalPlayer
 local Cam = workspace.CurrentCamera
 
--- Configurações com proteção de suavização
-local Config = {
+-- Configurações Camufladas
+local SecureConfig = {
     Aimbot = {
-        Enabled = false,
+        Active = false,
         FOV = 150,
-        Smoothness = 0.15, -- [NOVO] Quanto menor, mais suave/seguro
-        TargetPart = "Head",
-        MaxDistance = 500,
-        VisibleCheck = true
+        Smooth = 0.12, -- Suavização para parecer humano
+        Part = "Head",
+        Dist = 500
     },
-    ESP = {
-        Enabled = false
+    Visuals = {
+        BoxEnabled = false,
+        TeamCheck = true,
+        SecureColor = Color3.fromRGB(0, 255, 120)
     }
 }
 
-local CircleFOV = Drawing.new("Circle")
-CircleFOV.Thickness = 1
-CircleFOV.NumSides = 100
-CircleFOV.Radius = Config.Aimbot.FOV
-CircleFOV.Visible = false
-CircleFOV.Color = Color3.fromRGB(255, 255, 255)
+local FOV_Ring = Drawing.new("Circle")
+FOV_Ring.Visible = false
+FOV_Ring.Thickness = 1
+FOV_Ring.Radius = SecureConfig.Aimbot.FOV
+FOV_Ring.Color = Color3.new(1, 1, 1)
 
--- Função Wall Check (Otimizada)
-local function CheckVisibility(Part)
-    local Char = LP.Character
-    if not Char then return false end
-    local RayParams = RaycastParams.new()
-    RayParams.FilterDescendantsInstances = {Char, Cam}
-    RayParams.FilterType = Enum.RaycastFilterType.Exclude
-    local Result = workspace:Raycast(Cam.CFrame.Position, (Part.Position - Cam.CFrame.Position).Unit * 1000, RayParams)
-    return Result == nil or Result.Instance:IsDescendantOf(Part.Parent)
+local Cache_ESP = {}
+
+-- Criar Box Seguro
+local function CreateSecureBox(P)
+    local Box = Drawing.new("Square")
+    Box.Visible = false
+    Box.Color = SecureConfig.Visuals.SecureColor
+    Box.Thickness = 1
+    Box.Filled = false
+    Cache_ESP[P] = Box
 end
 
--- Lógica de busca de alvo com suavização (Lerp)
-local function GetTarget()
-    local Target = nil
-    local Closest = Config.Aimbot.FOV
-    local MousePos = UIS:GetMouseLocation()
-
-    for _, v in pairs(Plrs:GetPlayers()) do
-        if v ~= LP and v.Character and v.Character:FindFirstChild(Config.Aimbot.TargetPart) then
-            local Part = v.Character[Config.Aimbot.TargetPart]
-            local ScreenPos, OnScreen = Cam:WorldToViewportPoint(Part.Position)
+-- Lógica do ESP (Box)
+local function UpdateVisuals()
+    for p, box in pairs(Cache_ESP) do
+        if SecureConfig.Visuals.BoxEnabled and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") then
+            local Hum = p.Character.Humanoid
+            local Root = p.Character.HumanoidRootPart
+            local Pos, OnScreen = Cam:WorldToViewportPoint(Root.Position)
             
+            if OnScreen and Hum.Health > 0 then
+                local Dist = (Cam.CFrame.Position - Root.Position).Magnitude
+                if Dist < SecureConfig.Aimbot.Dist then
+                    local Size = 1000 / Dist
+                    box.Size = Vector2.new(Size, Size * 1.5)
+                    box.Position = Vector2.new(Pos.X - Size/2, Pos.Y - Size/1.5)
+                    box.Visible = true
+                else
+                    box.Visible = false
+                end
+            else
+                box.Visible = false
+            end
+        else
+            box.Visible = false
+        end
+    end
+end
+
+-- Função de Alvo (Otimizada)
+local function GetClosestTarget()
+    local t = nil
+    local sd = SecureConfig.Aimbot.FOV
+    for _, v in pairs(Plrs:GetPlayers()) do
+        if v ~= LP and v.Character and v.Character:FindFirstChild(SecureConfig.Aimbot.Part) then
+            local P = v.Character[SecureConfig.Aimbot.Part]
+            local Pos, OnScreen = Cam:WorldToViewportPoint(P.Position)
             if OnScreen then
-                local Dist = (Vector2.new(ScreenPos.X, ScreenPos.Y) - MousePos).Magnitude
-                if Dist < Closest and CheckVisibility(Part) then
-                    Closest = Dist
-                    Target = Part
+                local m = (Vector2.new(Pos.X, Pos.Y) - UIS:GetMouseLocation()).Magnitude
+                if m < sd then
+                    sd = m
+                    t = P
                 end
             end
         end
     end
-    return Target
+    return t
 end
 
--- Loop de Renderização (Aqui acontece a mágica indetectável)
+-- Loop Principal Unificado
 RS.RenderStepped:Connect(function()
-    CircleFOV.Position = UIS:GetMouseLocation()
-    CircleFOV.Radius = Config.Aimbot.FOV
+    UpdateVisuals()
+    FOV_Ring.Position = UIS:GetMouseLocation()
     
-    if Config.Aimbot.Enabled then
-        local Alvo = GetTarget()
+    if SecureConfig.Aimbot.Active then
+        local Alvo = GetClosestTarget()
         if Alvo then
-            -- [SUAVIZAÇÃO] Em vez de travar instantâneo, a mira "desliza" até o alvo
-            local LookAt = CFrame.new(Cam.CFrame.Position, Alvo.Position)
-            Cam.CFrame = Cam.CFrame:Lerp(LookAt, Config.Aimbot.Smoothness)
+            -- Movimento suave (Lerp) para não dar "snap"
+            local Look = CFrame.new(Cam.CFrame.Position, Alvo.Position)
+            Cam.CFrame = Cam.CFrame:Lerp(Look, SecureConfig.Aimbot.Smooth)
         end
     end
 end)
 
---- [INTERFACE SIMPLIFICADA] ---
--- (Mantive a estrutura básica para não dar erro, mas adicionei a trava de segurança)
+-- Gerenciamento de Jogadores
+for _, p in pairs(Plrs:GetPlayers()) do if p ~= LP then CreateSecureBox(p) end end
+Plrs.PlayerAdded:Connect(CreateSecureBox)
 
-local Main = Instance.new("ScreenGui", game:GetService("CoreGui"))
-local Frame = Instance.new("Frame", Main)
-Frame.Size = UDim2.new(0, 200, 0, 150)
-Frame.Position = UDim2.new(0.5, -100, 0.5, -75)
-Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-Frame.Active = true
-Frame.Draggable = true
+--- [ INTERFACE COMPACTA ] ---
+local UI = Instance.new("ScreenGui", game:GetService("CoreGui"))
+local F = Instance.new("Frame", UI)
+F.Size = UDim2.new(0, 180, 0, 100)
+F.Position = UDim2.new(0.05, 0, 0.4, 0)
+F.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+F.Active = true
+F.Draggable = true
+Instance.new("UICorner", F)
 
-local BtnAim = Instance.new("TextButton", Frame)
-BtnAim.Size = UDim2.new(1, -20, 0, 40)
-BtnAim.Position = UDim2.new(0, 10, 0, 10)
-BtnAim.Text = "AIMBOT: OFF"
-BtnAim.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-BtnAim.TextColor3 = Color3.new(1,1,1)
+local function AddBtn(txt, pos, callback)
+    local b = Instance.new("TextButton", F)
+    b.Size = UDim2.new(1, -20, 0, 35)
+    b.Position = pos
+    b.Text = txt
+    b.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    b.TextColor3 = Color3.new(1,1,1)
+    Instance.new("UICorner", b)
+    b.MouseButton1Click:Connect(function() callback(b) end)
+end
 
-BtnAim.MouseButton1Click:Connect(function()
-    Config.Aimbot.Enabled = not Config.Aimbot.Enabled
-    BtnAim.Text = "AIMBOT: " .. (Config.Aimbot.Enabled and "ON" or "OFF")
-    BtnAim.BackgroundColor3 = Config.Aimbot.Enabled and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
+AddBtn("AIMBOT: OFF", UDim2.new(0, 10, 0, 10), function(b)
+    SecureConfig.Aimbot.Active = not SecureConfig.Aimbot.Active
+    b.Text = "AIMBOT: " .. (SecureConfig.Aimbot.Active and "ON" or "OFF")
+    b.BackgroundColor3 = SecureConfig.Aimbot.Active and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(40, 40, 40)
 end)
 
-local LabelWarning = Instance.new("TextLabel", Frame)
-LabelWarning.Size = UDim2.new(1, 0, 0, 30)
-LabelWarning.Position = UDim2.new(0, 0, 1, -30)
-LabelWarning.Text = "MODO SUAVE ATIVADO"
-LabelWarning.TextColor3 = Color3.new(1, 0.8, 0)
-LabelWarning.BackgroundTransparency = 1
+AddBtn("ESP BOX: OFF", UDim2.new(0, 10, 0, 55), function(b)
+    SecureConfig.Visuals.BoxEnabled = not SecureConfig.Visuals.BoxEnabled
+    b.Text = "ESP BOX: " .. (SecureConfig.Visuals.BoxEnabled and "ON" or "OFF")
+    b.BackgroundColor3 = SecureConfig.Visuals.BoxEnabled and Color3.fromRGB(0, 120, 0) or Color3.fromRGB(40, 40, 40)
+end)
