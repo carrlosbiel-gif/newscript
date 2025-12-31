@@ -59,30 +59,40 @@ local function CreateESP(Player)
     ESP_Table[Player] = Objects
 end
 
--- Atualizar ESP
+-- Função de Atualizar ESP com limite de 500m
 local function UpdateESP(Player, Objects)
     local Char = Player.Character
     local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
     local Root = Char and Char:FindFirstChild("HumanoidRootPart")
 
+    -- Se o ESP estiver desligado ou o jogador estiver morto/inexistente
     if not Settings.ESP.Enabled or not Root or not Hum or Hum.Health <= 0 then
         for _, obj in pairs(Objects) do obj.Visible = false end
         return
     end
 
+    local Dist = (Camera.CFrame.Position - Root.Position).Magnitude
+
+    -- TRAVA DE DISTÂNCIA: Só mostra se estiver a menos de 500 metros
+    if Dist > 500 then
+        for _, obj in pairs(Objects) do obj.Visible = false end
+        return
+    end
+
     local Pos, OnScreen = Camera:WorldToViewportPoint(Root.Position)
+    
     if OnScreen then
-        local Dist = (Camera.CFrame.Position - Root.Position).Magnitude
         local Scale = 1000 / Dist
-        
         local healthPercent = Hum.Health / Hum.MaxHealth
         local dynamicColor = Color3.fromHSV(healthPercent * 0.3, 1, 1) 
 
+        -- Desenha o Box
         Objects.Box.Size = Vector2.new(Scale, Scale * 1.5)
         Objects.Box.Position = Vector2.new(Pos.X - Scale/2, Pos.Y - Scale/0.75)
         Objects.Box.Color = dynamicColor
         Objects.Box.Visible = true
         
+        -- Desenha o Texto de Distância
         Objects.Distance.Text = math.floor(Dist) .. "m"
         Objects.Distance.Position = Vector2.new(Pos.X, Objects.Box.Position.Y + Objects.Box.Size.Y + 5)
         Objects.Distance.Visible = true
@@ -90,7 +100,6 @@ local function UpdateESP(Player, Objects)
         for _, obj in pairs(Objects) do obj.Visible = false end
     end
 end
-
 -- Busca de Alvo (Com limite de distância)
 local function GetClosestPlayer()
     local Target = nil
