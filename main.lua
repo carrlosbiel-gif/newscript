@@ -5,15 +5,15 @@ local _L = _P.LocalPlayer
 local _C = workspace.CurrentCamera
 
 local _DATA = {
-    ESP = { Enabled = false },
+    ESP = { Enabled = false, MaxDist = 500 }, -- ESP Adicionado aqui
     Aimbot = {
         Enabled = false,
         FOV = 150,
         ShowFOV = false,
         TargetPart = "Head",
         MaxDistance = 500,
-        Smoothness = 0.15, -- Suavização (0.05 a 0.20 é o mais seguro)
-        Jitter = 0.35      -- Randomização (faz a mira tremer levemente como um humano)
+        Smoothness = 0.15,
+        Jitter = 0.35
     }
 }
 
@@ -26,6 +26,17 @@ _FOV_CIRC.Visible = false
 _FOV_CIRC.Color = Color3.fromRGB(255, 255, 255)
 
 local _E_TBL = {}
+
+-- [FUNÇÃO PARA CRIAR BOX ESP]
+local function CreateESP(Player)
+    local Box = Drawing.new("Square")
+    Box.Visible = false
+    Box.Color = Color3.fromRGB(255, 255, 255)
+    Box.Thickness = 1 -- Fino para ser discreto
+    Box.Filled = false
+    
+    _E_TBL[Player] = Box
+end
 
 -- [FUNÇÃO WALL CHECK]
 local function _RAY_CH(_T_PRT)
@@ -73,8 +84,8 @@ end
 -- [INTERFACE GRÁFICA]
 local UI = Instance.new("ScreenGui", game:GetService("CoreGui"))
 local Main = Instance.new("Frame", UI)
-Main.Size = UDim2.new(0, 320, 0, 450)
-Main.Position = UDim2.new(0.5, -160, 0.5, -225)
+Main.Size = UDim2.new(0, 320, 0, 480) -- Aumentado para o novo botão
+Main.Position = UDim2.new(0.5, -160, 0.5, -240)
 Main.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 Main.Active = true
 Main.Draggable = true
@@ -110,56 +121,31 @@ local PartBtn = NewBtn("ALVO: CABEÇA", UDim2.new(0, 20, 0, 95), Color3.fromRGB(
     _DATA.Aimbot.TargetPart = (_DATA.Aimbot.TargetPart == "Head" and "HumanoidRootPart" or "Head")
 end)
 
-local FovShowBtn = NewBtn("VER CÍRCULO: OFF", UDim2.new(0, 20, 0, 140), Color3.fromRGB(40, 40, 40), function()
+local EspBtn = NewBtn("ESP BOX: OFF", UDim2.new(0, 20, 0, 140), Color3.fromRGB(40, 40, 40), function()
+    _DATA.ESP.Enabled = not _DATA.ESP.Enabled
+end)
+
+local FovShowBtn = NewBtn("VER CÍRCULO: OFF", UDim2.new(0, 20, 0, 185), Color3.fromRGB(40, 40, 40), function()
     _DATA.Aimbot.ShowFOV = not _DATA.Aimbot.ShowFOV
 end)
 
 -- Controles de Tamanho do FOV
 local FovLabel = Instance.new("TextLabel", Main)
 FovLabel.Size = UDim2.new(1, 0, 0, 30)
-FovLabel.Position = UDim2.new(0, 0, 0, 185)
+FovLabel.Position = UDim2.new(0, 0, 0, 225)
 FovLabel.Text = "AJUSTE DE FOV: " .. _DATA.Aimbot.FOV
 FovLabel.TextColor3 = Color3.new(1,1,1)
 FovLabel.BackgroundTransparency = 1
 FovLabel.Font = Enum.Font.Gotham
 
-local FovMenos = NewBtn("-", UDim2.new(0, 60, 0, 215), Color3.fromRGB(150, 50, 50), function()
+local FovMenos = NewBtn("-", UDim2.new(0, 60, 0, 255), Color3.fromRGB(150, 50, 50), function()
     _DATA.Aimbot.FOV = math.max(10, _DATA.Aimbot.FOV - 10)
 end)
 FovMenos.Size = UDim2.new(0, 80, 0, 35)
 
-local FovMais = NewBtn("+", UDim2.new(0, 180, 0, 215), Color3.fromRGB(50, 100, 150), function()
+local FovMais = NewBtn("+", UDim2.new(0, 180, 0, 255), Color3.fromRGB(50, 100, 150), function()
     _DATA.Aimbot.FOV = math.min(800, _DATA.Aimbot.FOV + 10)
 end)
 FovMais.Size = UDim2.new(0, 80, 0, 35)
 
--- [LOOP PRINCIPAL]
-_R.RenderStepped:Connect(function()
-    -- Atualização Visual da UI
-    AimBtn.Text = "AIMBOT: " .. (_DATA.Aimbot.Enabled and "ON" or "OFF")
-    AimBtn.BackgroundColor3 = _DATA.Aimbot.Enabled and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(40, 40, 40)
-    PartBtn.Text = "ALVO: " .. (_DATA.Aimbot.TargetPart == "Head" and "CABEÇA" or "PEITO")
-    FovShowBtn.Text = "VER CÍRCULO: " .. (_DATA.Aimbot.ShowFOV and "ON" or "OFF")
-    FovLabel.Text = "AJUSTE DE FOV: " .. _DATA.Aimbot.FOV
-    
-    -- FOV Desenho
-    _FOV_CIRC.Visible = _DATA.Aimbot.ShowFOV
-    _FOV_CIRC.Radius = _DATA.Aimbot.FOV
-    _FOV_CIRC.Position = _U:GetMouseLocation()
-
-    -- Aimbot Suave com Randomização
-    if _DATA.Aimbot.Enabled then
-        local _TARGET = _GET_TARGET()
-        if _TARGET then
-            local _T_POS = _GET_RND_POS(_TARGET.Position)
-            local _LOOK = CFrame.new(_C.CFrame.Position, _T_POS)
-            -- [SUAVIZAÇÃO - LERP]
-            _C.CFrame = _C.CFrame:Lerp(_LOOK, _DATA.Aimbot.Smoothness)
-        end
-    end
-end)
-
--- Atalho para fechar/abrir menu
-_U.InputBegan:Connect(function(i)
-    if i.KeyCode == Enum.KeyCode.RightShift then Main.Visible = not Main.Visible end
-end)
+--
