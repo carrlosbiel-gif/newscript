@@ -1,14 +1,13 @@
 --[[ 
-    SCRIPT ATUALIZADO:
-    - Adicionado Círculo de FOV (Show FOV)
-    - Botão na Interface para controlar o FOV
-    - Team Check Otimizado
+    BIELZINN V2:
+    - Wall Check (Não gruda através de paredes)
+    - Botões para mudar tamanho do FOV (+/-)
+    - Team Check e ESP inclusos
 ]]
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
@@ -18,14 +17,12 @@ local Settings = {
         Enabled = false,
         TeamCheck = false,
         BoxColor = Color3.fromRGB(255, 0, 0),
-        SnaplineEnabled = false,
     },
     Aimbot = {
         Enabled = false,
         TeamCheck = false,
-        FOV = 150, -- Tamanho do círculo
-        MaxDistance = 500,
-        ShowFOV = false, -- Controlado pelo botão
+        FOV = 150,
+        ShowFOV = false,
         TargetPart = "Head"
     }
 }
@@ -41,12 +38,32 @@ FOVCircle.Color = Color3.fromRGB(255, 255, 255)
 
 local ESP_Table = {}
 
+-- Função de Wall Check (Verifica se há paredes no caminho)
+local function IsVisible(TargetPart)
+    local Character = LocalPlayer.Character
+    if not Character then return false end
+    
+    local Origin = Camera.CFrame.Position
+    local Destination = TargetPart.Position
+    local Direction = (Destination - Origin).Unit * (Destination - Origin).Magnitude
+    
+    local RayParams = RaycastParams.new()
+    RayParams.FilterDescendantsInstances = {Character, Camera}
+    RayParams.FilterType = Enum.RaycastFilterType.Exclude
+    
+    local Result = workspace:Raycast(Origin, Direction, RayParams)
+    
+    if Result then
+        return Result.Instance:IsDescendantOf(TargetPart.Parent)
+    end
+    return false
+end
+
 local function CreateESP(Player)
     if Player == LocalPlayer then return end
     local Objects = {
         Box = Drawing.new("Square"),
-        Distance = Drawing.new("Text"),
-        Snapline = Drawing.new("Line")
+        Distance = Drawing.new("Text")
     }
     Objects.Box.Thickness = 2
     Objects.Box.Filled = false
@@ -62,11 +79,6 @@ local function UpdateESP(Player, Objects)
     local Root = Char and Char:FindFirstChild("HumanoidRootPart")
 
     if not Settings.ESP.Enabled or not Root or not Hum or Hum.Health <= 0 then
-        for _, obj in pairs(Objects) do obj.Visible = false end
-        return
-    end
-
-    if Settings.ESP.TeamCheck and Player.Team == LocalPlayer.Team then
         for _, obj in pairs(Objects) do obj.Visible = false end
         return
     end
@@ -94,7 +106,7 @@ local function GetClosestPlayer()
     for _, Player in pairs(Players:GetPlayers()) do
         if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild(Settings.Aimbot.TargetPart) then
             if Settings.Aimbot.TeamCheck and Player.Team == LocalPlayer.Team then continue end
-
+            
             local Part = Player.Character[Settings.Aimbot.TargetPart]
             local Pos, OnScreen = Camera:WorldToViewportPoint(Part.Position)
             
@@ -103,8 +115,11 @@ local function GetClosestPlayer()
                 local Dist = (Vector2.new(Pos.X, Pos.Y) - MousePos).Magnitude
                 
                 if Dist < ShortestDist then
-                    ShortestDist = Dist
-                    Target = Player
+                    -- AQUI ENTRA O WALL CHECK
+                    if IsVisible(Part) then
+                        ShortestDist = Dist
+                        Target = Player
+                    end
                 end
             end
         end
@@ -115,8 +130,8 @@ end
 -- INTERFACE
 local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 350, 0, 300) -- Aumentei um pouco a altura
-MainFrame.Position = UDim2.new(0.5, -175, 0.5, -125)
+MainFrame.Size = UDim2.new(0, 350, 0, 320)
+MainFrame.Position = UDim2.new(0.5, -175, 0.5, -160)
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
@@ -125,58 +140,82 @@ Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
 
 local Title = Instance.new("TextLabel", MainFrame)
 Title.Size = UDim2.new(1, 0, 0, 40)
-Title.Text = "BIELZINN V1 | FOV SYSTEM"
+Title.Text = "BIELZINN V2 | WALL CHECK"
 Title.TextColor3 = Color3.new(1,1,1)
 Title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 16
 
--- Botão Aimbot
-local AimBtn = Instance.new("TextButton", MainFrame)
-AimBtn.Size = UDim2.new(0, 310, 0, 40)
-AimBtn.Position = UDim2.new(0, 20, 0, 60)
-AimBtn.Text = "Aimbot: OFF"
-AimBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-AimBtn.TextColor3 = Color3.new(1,1,1)
-AimBtn.Font = Enum.Font.Gotham
-AimBtn.MouseButton1Click:Connect(function()
+-- Botões de Aimbot, ESP e Show FOV (Organizados)
+local function CreateButton(text, pos, callback)
+    local btn = Instance.new("TextButton", MainFrame)
+    btn.Size = UDim2.new(0, 310, 0, 35)
+    btn.Position = pos
+    btn.Text = text
+    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Font = Enum.Font.Gotham
+    btn.MouseButton1Click:Connect(callback)
+    return btn
+end
+
+local AimBtn = CreateButton("Aimbot: OFF", UDim2.new(0, 20, 0, 50), function()
     Settings.Aimbot.Enabled = not Settings.Aimbot.Enabled
-    AimBtn.Text = "Aimbot: " .. (Settings.Aimbot.Enabled and "ON" or "OFF")
-    AimBtn.BackgroundColor3 = Settings.Aimbot.Enabled and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(45, 45, 45)
+    _G.AimBtn.Text = "Aimbot: " .. (Settings.Aimbot.Enabled and "ON" or "OFF")
+    _G.AimBtn.BackgroundColor3 = Settings.Aimbot.Enabled and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(45, 45, 45)
 end)
+_G.AimBtn = AimBtn
 
--- Botão ESP
-local EspBtn = Instance.new("TextButton", MainFrame)
-EspBtn.Size = UDim2.new(0, 310, 0, 40)
-EspBtn.Position = UDim2.new(0, 20, 0, 110)
-EspBtn.Text = "ESP: OFF"
-EspBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-EspBtn.TextColor3 = Color3.new(1,1,1)
-EspBtn.Font = Enum.Font.Gotham
-EspBtn.MouseButton1Click:Connect(function()
+local EspBtn = CreateButton("ESP: OFF", UDim2.new(0, 20, 0, 95), function()
     Settings.ESP.Enabled = not Settings.ESP.Enabled
-    EspBtn.Text = "ESP: " .. (Settings.ESP.Enabled and "ON" or "OFF")
-    EspBtn.BackgroundColor3 = Settings.ESP.Enabled and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(45, 45, 45)
+    _G.EspBtn.Text = "ESP: " .. (Settings.ESP.Enabled and "ON" or "OFF")
+    _G.EspBtn.BackgroundColor3 = Settings.ESP.Enabled and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(45, 45, 45)
 end)
+_G.EspBtn = EspBtn
 
--- Botão Show FOV (NOVO)
-local FovBtn = Instance.new("TextButton", MainFrame)
-FovBtn.Size = UDim2.new(0, 310, 0, 40)
-FovBtn.Position = UDim2.new(0, 20, 0, 160)
-FovBtn.Text = "Show FOV: OFF"
-FovBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-FovBtn.TextColor3 = Color3.new(1,1,1)
-FovBtn.Font = Enum.Font.Gotham
-FovBtn.MouseButton1Click:Connect(function()
+local FovBtn = CreateButton("Show FOV: OFF", UDim2.new(0, 20, 0, 140), function()
     Settings.Aimbot.ShowFOV = not Settings.Aimbot.ShowFOV
     FOVCircle.Visible = Settings.Aimbot.ShowFOV
-    FovBtn.Text = "Show FOV: " .. (Settings.Aimbot.ShowFOV and "ON" or "OFF")
-    FovBtn.BackgroundColor3 = Settings.Aimbot.ShowFOV and Color3.fromRGB(0, 150, 150) or Color3.fromRGB(45, 45, 45)
+    _G.FovBtn.Text = "Show FOV: " .. (Settings.Aimbot.ShowFOV and "ON" or "OFF")
+    _G.FovBtn.BackgroundColor3 = Settings.Aimbot.ShowFOV and Color3.fromRGB(0, 150, 150) or Color3.fromRGB(45, 45, 45)
+end)
+_G.FovBtn = FovBtn
+
+-- CONTROLE DE TAMANHO DO FOV
+local FovLabel = Instance.new("TextLabel", MainFrame)
+FovLabel.Size = UDim2.new(0, 310, 0, 30)
+FovLabel.Position = UDim2.new(0, 20, 0, 190)
+FovLabel.Text = "FOV Size: " .. Settings.Aimbot.FOV
+FovLabel.TextColor3 = Color3.new(1,1,1)
+FovLabel.BackgroundTransparency = 1
+FovLabel.Font = Enum.Font.Gotham
+
+local MinusBtn = Instance.new("TextButton", MainFrame)
+MinusBtn.Size = UDim2.new(0, 150, 0, 35)
+MinusBtn.Position = UDim2.new(0, 20, 0, 225)
+MinusBtn.Text = "FOV -10"
+MinusBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+MinusBtn.TextColor3 = Color3.new(1,1,1)
+
+local PlusBtn = Instance.new("TextButton", MainFrame)
+PlusBtn.Size = UDim2.new(0, 150, 0, 35)
+PlusBtn.Position = UDim2.new(0, 180, 0, 225)
+PlusBtn.Text = "FOV +10"
+PlusBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
+PlusBtn.TextColor3 = Color3.new(1,1,1)
+
+MinusBtn.MouseButton1Click:Connect(function()
+    Settings.Aimbot.FOV = math.max(10, Settings.Aimbot.FOV - 10)
+    FovLabel.Text = "FOV Size: " .. Settings.Aimbot.FOV
+end)
+
+PlusBtn.MouseButton1Click:Connect(function()
+    Settings.Aimbot.FOV = math.min(800, Settings.Aimbot.FOV + 10)
+    FovLabel.Text = "FOV Size: " .. Settings.Aimbot.FOV
 end)
 
 -- Loop Principal
 RunService.RenderStepped:Connect(function()
-    -- Atualiza posição e raio do círculo
     if Settings.Aimbot.ShowFOV then
         FOVCircle.Radius = Settings.Aimbot.FOV
         FOVCircle.Position = UserInputService:GetMouseLocation()
@@ -196,12 +235,6 @@ end)
 
 for _, p in pairs(Players:GetPlayers()) do CreateESP(p) end
 Players.PlayerAdded:Connect(CreateESP)
-Players.PlayerRemoving:Connect(function(p)
-    if ESP_Table[p] then
-        for _, obj in pairs(ESP_Table[p]) do obj:Remove() end
-        ESP_Table[p] = nil
-    end
-end)
 
 UserInputService.InputBegan:Connect(function(input)
     if input.KeyCode == Enum.KeyCode.RightShift then
