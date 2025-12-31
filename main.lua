@@ -4,28 +4,22 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- IDENTIFICA O MELHOR LOCAL PARA A UI
-local ParentUI = (gethui and gethui()) or (game:GetService("CoreGui"):FindFirstChild("RobloxGui") and game:GetService("CoreGui")) or LocalPlayer:WaitForChild("PlayerGui")
-
--- LIMPA VERSÕES ANTIGAS PARA NÃO ACUMULAR
-if ParentUI:FindFirstChild("BielzinnHub_CLTV3") then
-    ParentUI:FindFirstChild("BielzinnHub_CLTV3"):Destroy()
-end
-
 local Settings = {
-    ESP = { Enabled = false, TeamCheck = true },
+    ESP = {
+        Enabled = false,
+        TeamCheck = false,
+    },
     Aimbot = {
         Enabled = false,
-        TeamCheck = true,
+        TeamCheck = false,
         FOV = 150,
         ShowFOV = false,
         TargetPart = "Head",
-        MaxDistance = 500,
-        Smoothing = 0.15 -- Mira suave
+        MaxDistance = 500 -- DISTÂNCIA MÁXIMA PADRÃO
     }
 }
 
--- BIBLIOTECA DE DESENHO (FOV)
+-- Círculo do FOV
 local FOVCircle = Drawing.new("Circle")
 FOVCircle.Thickness = 1
 FOVCircle.NumSides = 100
@@ -36,41 +30,97 @@ FOVCircle.Color = Color3.fromRGB(255, 255, 255)
 
 local ESP_Table = {}
 
--- FUNÇÕES TÉCNICAS
-local function IsEnemy(Player)
-    if not Settings.Aimbot.TeamCheck then return true end
-    return Player.Team ~= LocalPlayer.Team
-end
-
+-- Função Wall Check
 local function IsVisible(TargetPart)
     local Character = LocalPlayer.Character
     if not Character then return false end
+    local Origin = Camera.CFrame.Position
+    local Destination = TargetPart.Position
+    local Direction = (Destination - Origin).Unit * (Destination - Origin).Magnitude
     local RayParams = RaycastParams.new()
     RayParams.FilterDescendantsInstances = {Character, Camera}
     RayParams.FilterType = Enum.RaycastFilterType.Exclude
-    local Result = workspace:Raycast(Camera.CFrame.Position, (TargetPart.Position - Camera.CFrame.Position), RayParams)
+    local Result = workspace:Raycast(Origin, Direction, RayParams)
     return Result == nil or Result.Instance:IsDescendantOf(TargetPart.Parent)
 end
 
+-- Criar Desenhos do ESP
+local function CreateESP(Player)
+    if Player == LocalPlayer then return end
+    local Objects = {
+        Box = Drawing.new("Square"),
+        Distance = Drawing.new("Text")
+    }
+    Objects.Box.Thickness = 2
+    Objects.Box.Filled = false
+    Objects.Distance.Size = 16
+    Objects.Distance.Center = true
+    Objects.Distance.Outline = true
+    ESP_Table[Player] = Objects
+end
+
+-- Função de Atualizar ESP com limite de 500m
+local function UpdateESP(Player, Objects)
+    local Char = Player.Character
+    local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+    local Root = Char and Char:FindFirstChild("HumanoidRootPart")
+
+    -- Se o ESP estiver desligado ou o jogador estiver morto/inexistente
+    if not Settings.ESP.Enabled or not Root or not Hum or Hum.Health <= 0 then
+        for _, obj in pairs(Objects) do obj.Visible = false end
+        return
+    end
+
+    local Dist = (Camera.CFrame.Position - Root.Position).Magnitude
+
+    -- TRAVA DE DISTÂNCIA: Só mostra se estiver a menos de 500 metros
+    if Dist > 500 then
+        for _, obj in pairs(Objects) do obj.Visible = false end
+        return
+    end
+
+    local Pos, OnScreen = Camera:WorldToViewportPoint(Root.Position)
+    
+    if OnScreen then
+        local Scale = 1000 / Dist
+        local healthPercent = Hum.Health / Hum.MaxHealth
+        local dynamicColor = Color3.fromHSV(healthPercent * 0.3, 1, 1) 
+
+        -- Desenha o Box
+        Objects.Box.Size = Vector2.new(Scale, Scale * 1.5)
+        Objects.Box.Position = Vector2.new(Pos.X - Scale/2, Pos.Y - Scale/0.75)
+        Objects.Box.Color = dynamicColor
+        Objects.Box.Visible = true
+        
+        -- Desenha o Texto de Distância
+        Objects.Distance.Text = math.floor(Dist) .. "m"
+        Objects.Distance.Position = Vector2.new(Pos.X, Objects.Box.Position.Y + Objects.Box.Size.Y + 5)
+        Objects.Distance.Visible = true
+    else
+        for _, obj in pairs(Objects) do obj.Visible = false end
+    end
+end
+-- Busca de Alvo (Com limite de distância)
 local function GetClosestPlayer()
     local Target = nil
     local ShortestDist = Settings.Aimbot.FOV
     for _, Player in pairs(Players:GetPlayers()) do
-        if Player ~= LocalPlayer and IsEnemy(Player) and Player.Character then
-            local Part = Player.Character:FindFirstChild(Settings.Aimbot.TargetPart)
-            local Root = Player.Character:FindFirstChild("HumanoidRootPart")
-            local Hum = Player.Character:FindFirstChildOfClass("Humanoid")
-            if Part and Root and Hum and Hum.Health > 0 then
-                local RealDist = (LocalPlayer.Character.HumanoidRootPart.Position - Root.Position).Magnitude
-                if RealDist <= Settings.Aimbot.MaxDistance then
-                    local Pos, OnScreen = Camera:WorldToViewportPoint(Part.Position)
-                    if OnScreen then
-                        local MousePos = UserInputService:GetMouseLocation()
-                        local DistFOV = (Vector2.new(Pos.X, Pos.Y) - MousePos).Magnitude
-                        if DistFOV < ShortestDist and IsVisible(Part) then
-                            ShortestDist = DistFOV
-                            Target = Player
-                        end
+        if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild(Settings.Aimbot.TargetPart) and Player.Character:FindFirstChild("HumanoidRootPart") then
+            local Part = Player.Character[Settings.Aimbot.TargetPart]
+            local Root = Player.Character.HumanoidRootPart
+            
+            -- VERIFICA A DISTÂNCIA REAL ENTRE VOCÊ E O ALVO
+            local RealDist = (LocalPlayer.Character.HumanoidRootPart.Position - Root.Position).Magnitude
+            
+            -- SÓ PROSSEGUE SE ESTIVER DENTRO DO LIMITE DE DISTÂNCIA
+            if RealDist <= Settings.Aimbot.MaxDistance then
+                local Pos, OnScreen = Camera:WorldToViewportPoint(Part.Position)
+                if OnScreen then
+                    local MousePos = UserInputService:GetMouseLocation()
+                    local DistFOV = (Vector2.new(Pos.X, Pos.Y) - MousePos).Magnitude
+                    if DistFOV < ShortestDist and IsVisible(Part) then
+                        ShortestDist = DistFOV
+                        Target = Player
                     end
                 end
             end
@@ -79,39 +129,49 @@ local function GetClosestPlayer()
     return Target
 end
 
--- INTERFACE PRINCIPAL
-local ScreenGui = Instance.new("ScreenGui", ParentUI)
-ScreenGui.Name = "BielzinnHub_CLTV3"
-
+-- INTERFACE
+local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 350, 0, 520)
-MainFrame.Position = UDim2.new(0.5, -175, 0.5, -260)
-MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainFrame.Size = UDim2.new(0, 350, 0, 560) -- Aumentado para caber novos botões
+MainFrame.Position = UDim2.new(0.5, -175, 0.5, -280)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
 Instance.new("UICorner", MainFrame)
+
+local BackgroundImg = Instance.new("ImageLabel", MainFrame)
+BackgroundImg.Size = UDim2.new(1, 0, 1, 0)
+BackgroundImg.Image = "rbxassetid://13247072551"
+BackgroundImg.BackgroundTransparency = 1
+BackgroundImg.ScaleType = Enum.ScaleType.Stretch
+BackgroundImg.ZIndex = 0
+Instance.new("UICorner", BackgroundImg)
 
 local Title = Instance.new("TextLabel", MainFrame)
 Title.Size = UDim2.new(1, 0, 0, 40)
 Title.Text = "BIELZINN HUB | CLT V3"
 Title.TextColor3 = Color3.new(1,1,1)
+Title.BackgroundTransparency = 0.3
 Title.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 Title.Font = Enum.Font.GothamBold
+Title.ZIndex = 2
 Instance.new("UICorner", Title)
 
-local Content = Instance.new("Frame", MainFrame)
-Content.Size = UDim2.new(1, 0, 1, -50)
-Content.Position = UDim2.new(0, 0, 0, 50)
-Content.BackgroundTransparency = 1
+local MinBtn = Instance.new("TextButton", MainFrame)
+MinBtn.Size = UDim2.new(0, 30, 0, 30)
+MinBtn.Position = UDim2.new(1, -40, 0, 5)
+MinBtn.Text = "_"
+MinBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+MinBtn.TextColor3 = Color3.new(1,1,1)
+MinBtn.ZIndex = 3
+Instance.new("UICorner", MinBtn)
 
-local TargetStatus = Instance.new("TextLabel", Content)
-TargetStatus.Size = UDim2.new(0, 310, 0, 35)
-TargetStatus.Position = UDim2.new(0, 20, 0, 10)
-TargetStatus.Text = "BUSCANDO INIMIGOS..."
-TargetStatus.TextColor3 = Color3.fromRGB(255, 255, 255)
-TargetStatus.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-TargetStatus.BackgroundTransparency = 0.5
-Instance.new("UICorner", TargetStatus)
+local Content = Instance.new("Frame", MainFrame)
+Content.Size = UDim2.new(1, 0, 1, -60)
+Content.Position = UDim2.new(0, 0, 0, 60)
+Content.BackgroundTransparency = 1
+Content.ZIndex = 2
 
 local function NewBtn(txt, pos, color)
     local b = Instance.new("TextButton", Content)
@@ -119,38 +179,64 @@ local function NewBtn(txt, pos, color)
     b.Position = pos
     b.Text = txt
     b.BackgroundColor3 = color
+    b.BackgroundTransparency = 0.2
     b.TextColor3 = Color3.new(1,1,1)
     b.Font = Enum.Font.GothamBold
+    b.ZIndex = 3
     Instance.new("UICorner", b)
     return b
 end
 
--- BOTOES
-local AimBtn = NewBtn("Aimbot: OFF", UDim2.new(0, 20, 0, 55), Color3.fromRGB(35, 35, 35))
-local TeamBtn = NewBtn("Team Check: ON", UDim2.new(0, 20, 0, 100), Color3.fromRGB(0, 100, 100))
-local TargetBtn = NewBtn("Alvo: CABEÇA", UDim2.new(0, 20, 0, 145), Color3.fromRGB(35, 35, 35))
-local EspBtn = NewBtn("ESP: OFF", UDim2.new(0, 20, 0, 190), Color3.fromRGB(35, 35, 35))
-local FovBtn = NewBtn("Ver FOV: OFF", UDim2.new(0, 20, 0, 235), Color3.fromRGB(35, 35, 35))
+local AimBtn = NewBtn("Aimbot: OFF", UDim2.new(0, 20, 0, 0), Color3.fromRGB(30, 30, 30))
+local TargetBtn = NewBtn("Alvo: CABEÇA", UDim2.new(0, 20, 0, 40), Color3.fromRGB(30, 30, 30))
+local EspBtn = NewBtn("ESP: OFF", UDim2.new(0, 20, 0, 80), Color3.fromRGB(30, 30, 30))
+local FovVisBtn = NewBtn("Ver Círculo: OFF", UDim2.new(0, 20, 0, 120), Color3.fromRGB(30, 30, 30))
 
--- CONTROLES DE ALCANCE
-local DistLabel = NewBtn("ALCANCE: " .. Settings.Aimbot.MaxDistance .. "m", UDim2.new(0, 20, 0, 285), Color3.fromRGB(20, 20, 20))
-local MenosDist = NewBtn("-50m", UDim2.new(0, 20, 0, 325), Color3.fromRGB(120, 40, 40))
+-- CONTROLE DE FOV
+local DisplayFov = Instance.new("TextLabel", Content)
+DisplayFov.Size = UDim2.new(0, 310, 0, 25)
+DisplayFov.Position = UDim2.new(0, 20, 0, 160)
+DisplayFov.Text = "TAMANHO FOV: " .. Settings.Aimbot.FOV
+DisplayFov.TextColor3 = Color3.fromRGB(255, 255, 255)
+DisplayFov.BackgroundTransparency = 1
+DisplayFov.Font = Enum.Font.GothamBold
+DisplayFov.ZIndex = 3
+
+local MenosFov = NewBtn("FOV -10", UDim2.new(0, 20, 0, 190), Color3.fromRGB(150, 50, 50))
+MenosFov.Size = UDim2.new(0, 150, 0, 30)
+local MaisFov = NewBtn("FOV +10", UDim2.new(0, 180, 0, 190), Color3.fromRGB(50, 100, 150))
+MaisFov.Size = UDim2.new(0, 150, 0, 30)
+
+-- CONTROLE DE DISTÂNCIA DO AIM (O QUE VOCÊ PEDIU)
+local DisplayDist = Instance.new("TextLabel", Content)
+DisplayDist.Size = UDim2.new(0, 310, 0, 25)
+DisplayDist.Position = UDim2.new(0, 20, 0, 230)
+DisplayDist.Text = "ALCANCE AIM: " .. Settings.Aimbot.MaxDistance .. "m"
+DisplayDist.TextColor3 = Color3.fromRGB(255, 255, 0)
+DisplayDist.BackgroundTransparency = 1
+DisplayDist.Font = Enum.Font.GothamBold
+DisplayDist.ZIndex = 3
+
+local MenosDist = NewBtn("ALCANCE -50m", UDim2.new(0, 20, 0, 260), Color3.fromRGB(150, 50, 50))
 MenosDist.Size = UDim2.new(0, 150, 0, 30)
-local MaisDist = NewBtn("+50m", UDim2.new(0, 180, 0, 325), Color3.fromRGB(40, 120, 40))
+local MaisDist = NewBtn("ALCANCE +50m", UDim2.new(0, 180, 0, 260), Color3.fromRGB(50, 100, 150))
 MaisDist.Size = UDim2.new(0, 150, 0, 30)
 
--- LOGICA DOS BOTOES
+-- Lógica Minimizar
+local minimizado = false
+MinBtn.MouseButton1Click:Connect(function()
+    minimizado = not minimizado
+    MainFrame:TweenSize(minimizado and UDim2.new(0, 350, 0, 40) or UDim2.new(0, 350, 0, 560), "Out", "Quad", 0.3, true)
+    Content.Visible = not minimizado
+    BackgroundImg.Visible = not minimizado
+    MinBtn.Text = minimizado and "+" or "_"
+end)
+
+-- Eventos
 AimBtn.MouseButton1Click:Connect(function()
     Settings.Aimbot.Enabled = not Settings.Aimbot.Enabled
     AimBtn.Text = "Aimbot: " .. (Settings.Aimbot.Enabled and "ON" or "OFF")
-    AimBtn.BackgroundColor3 = Settings.Aimbot.Enabled and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(35, 35, 35)
-end)
-
-TeamBtn.MouseButton1Click:Connect(function()
-    Settings.Aimbot.TeamCheck = not Settings.Aimbot.TeamCheck
-    Settings.ESP.TeamCheck = Settings.Aimbot.TeamCheck
-    TeamBtn.Text = "Team Check: " .. (Settings.Aimbot.TeamCheck and "ON" or "OFF")
-    TeamBtn.BackgroundColor3 = Settings.Aimbot.TeamCheck and Color3.fromRGB(0, 100, 100) or Color3.fromRGB(150, 0, 0)
+    AimBtn.BackgroundColor3 = Settings.Aimbot.Enabled and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(30, 30, 30)
 end)
 
 TargetBtn.MouseButton1Click:Connect(function()
@@ -161,41 +247,55 @@ end)
 EspBtn.MouseButton1Click:Connect(function()
     Settings.ESP.Enabled = not Settings.ESP.Enabled
     EspBtn.Text = "ESP: " .. (Settings.ESP.Enabled and "ON" or "OFF")
-    EspBtn.BackgroundColor3 = Settings.ESP.Enabled and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(35, 35, 35)
+    EspBtn.BackgroundColor3 = Settings.ESP.Enabled and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(30, 30, 30)
 end)
 
-FovBtn.MouseButton1Click:Connect(function()
+FovVisBtn.MouseButton1Click:Connect(function()
     Settings.Aimbot.ShowFOV = not Settings.Aimbot.ShowFOV
-    FovBtn.Text = "Ver FOV: " .. (Settings.Aimbot.ShowFOV and "ON" or "OFF")
+    FOVCircle.Visible = Settings.Aimbot.ShowFOV
+    FovVisBtn.Text = "Ver Círculo: " .. (Settings.Aimbot.ShowFOV and "ON" or "OFF")
 end)
 
-MaisDist.MouseButton1Click:Connect(function() Settings.Aimbot.MaxDistance += 50 DistLabel.Text = "ALCANCE: " .. Settings.Aimbot.MaxDistance .. "m" end)
-MenosDist.MouseButton1Click:Connect(function() if Settings.Aimbot.MaxDistance > 50 then Settings.Aimbot.MaxDistance -= 50 DistLabel.Text = "ALCANCE: " .. Settings.Aimbot.MaxDistance .. "m" end end)
+-- Botões FOV
+MaisFov.MouseButton1Click:Connect(function()
+    Settings.Aimbot.FOV = Settings.Aimbot.FOV + 10
+    DisplayFov.Text = "TAMANHO FOV: " .. Settings.Aimbot.FOV
+end)
+MenosFov.MouseButton1Click:Connect(function()
+    if Settings.Aimbot.FOV > 10 then
+        Settings.Aimbot.FOV = Settings.Aimbot.FOV - 10
+        DisplayFov.Text = "TAMANHO FOV: " .. Settings.Aimbot.FOV
+    end
+end)
 
--- LOOP DE RENDERIZAÇÃO
+-- Botões Alcance (Distância)
+MaisDist.MouseButton1Click:Connect(function()
+    Settings.Aimbot.MaxDistance = Settings.Aimbot.MaxDistance + 50
+    DisplayDist.Text = "ALCANCE AIM: " .. Settings.Aimbot.MaxDistance .. "m"
+end)
+MenosDist.MouseButton1Click:Connect(function()
+    if Settings.Aimbot.MaxDistance > 50 then
+        Settings.Aimbot.MaxDistance = Settings.Aimbot.MaxDistance - 50
+        DisplayDist.Text = "ALCANCE AIM: " .. Settings.Aimbot.MaxDistance .. "m"
+    end
+end)
+
+-- Loop Render
 RunService.RenderStepped:Connect(function()
     if Settings.Aimbot.ShowFOV then
-        FOVCircle.Visible = true
         FOVCircle.Radius = Settings.Aimbot.FOV
         FOVCircle.Position = UserInputService:GetMouseLocation()
-    else
-        FOVCircle.Visible = false
     end
-    
-    local T = GetClosestPlayer()
-    if T then
-        local d = (LocalPlayer.Character.HumanoidRootPart.Position - T.Character.HumanoidRootPart.Position).Magnitude
-        TargetStatus.Text = "ALVO: " .. T.Name:upper() .. " [" .. math.floor(d) .. "m]"
-        if Settings.Aimbot.Enabled then
-            local NewLook = CFrame.new(Camera.CFrame.Position, T.Character[Settings.Aimbot.TargetPart].Position)
-            Camera.CFrame = Camera.CFrame:Lerp(NewLook, Settings.Aimbot.Smoothing)
-        end
-    else
-        TargetStatus.Text = "BUSCANDO INIMIGOS..."
+    if Settings.Aimbot.Enabled then
+        local T = GetClosestPlayer()
+        if T then Camera.CFrame = CFrame.new(Camera.CFrame.Position, T.Character[Settings.Aimbot.TargetPart].Position) end
     end
+    for Player, Objects in pairs(ESP_Table) do UpdateESP(Player, Objects) end
 end)
 
--- Abre/Fecha com RightShift
+for _, p in pairs(Players:GetPlayers()) do CreateESP(p) end
+Players.PlayerAdded:Connect(CreateESP)
+
 UserInputService.InputBegan:Connect(function(i)
     if i.KeyCode == Enum.KeyCode.RightShift then MainFrame.Visible = not MainFrame.Visible end
 end)
