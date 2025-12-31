@@ -1,105 +1,55 @@
+-- Carregando a Library Rayfield
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "SYSTEM_OVERLAY_V3 | BIELZINN",
+   LoadingTitle = "Carregando Engine...",
+   LoadingSubtitle = "Segurança Ativa",
+   ConfigurationSaving = {
+      Enabled = false
+   },
+   KeySystem = false
+})
+
+-- Variáveis de Configuração (Nomes alterados para segurança)
+local Settings = {
+    Visuals = { Enabled = false, Range = 500 },
+    Assistance = { Enabled = false, FOV = 150, Target = "Head", MaxDist = 500, ShowFOV = false }
+}
+
+-- Serviços
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- Configurações com nomes alternativos para segurança de string
-local SystemCfg = {
-    Module_Alpha = { -- ESP
-        Active = false,
-        MaxRange = 500,
-    },
-    Module_Beta = { -- AIM
-        Active = false,
-        Range = 150,
-        RenderCircle = false,
-        Point = "Head",
-        DistanceLimit = 500
-    }
-}
+-- Círculo de FOV (Desenho nativo)
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1
+FOVCircle.NumSides = 100
+FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+FOVCircle.Filled = false
+FOVCircle.Visible = false
 
-local RenderPoint = Drawing.new("Circle")
-RenderPoint.Thickness = 1
-RenderPoint.NumSides = 60
-RenderPoint.Radius = SystemCfg.Module_Beta.Range
-RenderPoint.Visible = false
-RenderPoint.Color = Color3.fromRGB(255, 255, 255)
-
-local Data_Cache = {}
-
--- Função de Verificação de Parede (Wallcheck)
-local function CheckView(Part)
-    local Char = LocalPlayer.Character
-    if not Char then return false end
-    local RayParams = RaycastParams.new()
-    RayParams.FilterDescendantsInstances = {Char, Camera}
-    RayParams.FilterType = Enum.RaycastFilterType.Exclude
-    local Result = workspace:Raycast(Camera.CFrame.Position, (Part.Position - Camera.CFrame.Position).Unit * (Part.Position - Camera.CFrame.Position).Magnitude, RayParams)
-    return Result == nil or Result.Instance:IsDescendantOf(Part.Parent)
-end
-
-local function Initialize_Link(Player)
-    if Player == LocalPlayer then return end
-    local RenderObj = {
-        Frame = Drawing.new("Square"),
-        Label = Drawing.new("Text")
-    }
-    RenderObj.Frame.Thickness = 1
-    RenderObj.Label.Size = 14
-    RenderObj.Label.Center = true
-    RenderObj.Label.Outline = true
-    Data_Cache[Player] = RenderObj
-end
-
-local function Refresh_Link(Player, Obj)
-    local Char = Player.Character
-    local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
-    local Root = Char and Char:FindFirstChild("HumanoidRootPart")
-
-    if not SystemCfg.Module_Alpha.Active or not Root or not Hum or Hum.Health <= 0 then
-        for _, v in pairs(Obj) do v.Visible = false end
-        return
-    end
-
-    local Dist = (Camera.CFrame.Position - Root.Position).Magnitude
-    if Dist > SystemCfg.Module_Alpha.MaxRange then
-        for _, v in pairs(Obj) do v.Visible = false end
-        return
-    end
-
-    local Pos, OnScreen = Camera:WorldToViewportPoint(Root.Position)
-    if OnScreen then
-        local BoxSize = 1000 / Dist
-        Obj.Frame.Size = Vector2.new(BoxSize, BoxSize * 1.5)
-        Obj.Frame.Position = Vector2.new(Pos.X - BoxSize/2, Pos.Y - BoxSize/0.75)
-        Obj.Frame.Color = Color3.fromHSV(math.clamp(Hum.Health/100, 0, 0.3), 1, 1)
-        Obj.Frame.Visible = true
-        
-        Obj.Label.Text = "[" .. math.floor(Dist) .. "m]"
-        Obj.Label.Position = Vector2.new(Pos.X, Obj.Frame.Position.Y + Obj.Frame.Size.Y + 2)
-        Obj.Label.Visible = true
-    else
-        for _, v in pairs(Obj) do v.Visible = false end
-    end
-end
-
-local function SeekTarget()
+-- Lógica de Busca de Alvo (Instantânea)
+local function GetTarget()
     local BestTarget = nil
-    local MinDist = SystemCfg.Module_Beta.Range
-    for _, P in pairs(Players:GetPlayers()) do
-        if P ~= LocalPlayer and P.Character and P.Character:FindFirstChild(SystemCfg.Module_Beta.Point) then
-            local Part = P.Character[SystemCfg.Module_Beta.Point]
-            local Root = P.Character:FindFirstChild("HumanoidRootPart")
+    local MaxDistFOV = Settings.Assistance.FOV
+    
+    for _, Player in pairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild(Settings.Assistance.Target) then
+            local Part = Player.Character[Settings.Assistance.Target]
+            local Root = Player.Character:FindFirstChild("HumanoidRootPart")
             
             if Root then
-                local Mag = (LocalPlayer.Character.HumanoidRootPart.Position - Root.Position).Magnitude
-                if Mag <= SystemCfg.Module_Beta.DistanceLimit then
-                    local ScreenPos, Visible = Camera:WorldToViewportPoint(Part.Position)
-                    if Visible then
+                local RealDistance = (LocalPlayer.Character.HumanoidRootPart.Position - Root.Position).Magnitude
+                if RealDistance <= Settings.Assistance.MaxDist then
+                    local ScreenPos, OnScreen = Camera:WorldToViewportPoint(Part.Position)
+                    if OnScreen then
                         local MouseDist = (Vector2.new(ScreenPos.X, ScreenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
-                        if MouseDist < MinDist and CheckView(Part) then
-                            MinDist = MouseDist
+                        if MouseDist < MaxDistFOV then
+                            MaxDistFOV = MouseDist
                             BestTarget = Part
                         end
                     end
@@ -110,83 +60,83 @@ local function SeekTarget()
     return BestTarget
 end
 
--- INTERFACE VISUAL
-local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
-local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.new(0, 350, 0, 400)
-Main.Position = UDim2.new(0.5, -175, 0.5, -200)
-Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-Main.BorderSizePixel = 0
-Main.Active = true
-Main.Draggable = true
-Instance.new("UICorner", Main)
+-- [ TABS DA INTERFACE ]
+local MainTab = Window:CreateTab("Combate", 4483362458)
+local VisualTab = Window:CreateTab("Visuais", 4483362458)
 
-local Header = Instance.new("TextLabel", Main)
-Header.Size = UDim2.new(1, 0, 0, 45)
-Header.Text = "SYSTEM_OVERLAY_V3"
-Header.TextColor3 = Color3.new(1, 1, 1)
-Header.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-Header.Font = Enum.Font.GothamBold
-Instance.new("UICorner", Header)
+-- [ SEÇÃO DE COMBATE ]
+MainTab:CreateSection("Configurações de Mira")
 
-local Container = Instance.new("Frame", Main)
-Container.Size = UDim2.new(1, -20, 1, -60)
-Container.Position = UDim2.new(0, 10, 0, 55)
-Container.BackgroundTransparency = 1
+MainTab:CreateToggle({
+   Name = "Ativar Precision Assist (AIM)",
+   CurrentValue = false,
+   Callback = function(Value)
+      Settings.Assistance.Enabled = Value
+   end,
+})
 
-local UIList = Instance.new("UIListLayout", Container)
-UIList.Padding = UDim.new(0, 8)
+MainTab:CreateDropdown({
+   Name = "Alvo Prioritário",
+   Options = {"Head", "HumanoidRootPart"},
+   CurrentOption = {"Head"},
+   MultipleOptions = false,
+   Callback = function(Option)
+      Settings.Assistance.Target = Option[1]
+   end,
+})
 
-local function AddToggle(name, callback)
-    local btn = Instance.new("TextButton", Container)
-    btn.Size = UDim2.new(1, 0, 0, 40)
-    btn.Text = name .. ": OFF"
-    btn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = Enum.Font.Gotham
-    Instance.new("UICorner", btn)
-    
-    local state = false
-    btn.MouseButton1Click:Connect(function()
-        state = not state
-        btn.Text = name .. ": " .. (state and "ON" or "OFF")
-        btn.BackgroundColor3 = state and Color3.fromRGB(50, 100, 50) or Color3.fromRGB(35, 35, 35)
-        callback(state)
-    end)
-end
+MainTab:CreateSlider({
+   Name = "Tamanho do FOV",
+   Range = {0, 600},
+   Increment = 10,
+   Suffix = "px",
+   CurrentValue = 150,
+   Callback = function(Value)
+      Settings.Assistance.FOV = Value
+      FOVCircle.Radius = Value
+   end,
+})
 
-AddToggle("Visual Engine (ESP)", function(v) SystemCfg.Module_Alpha.Active = v end)
-AddToggle("Lock-On Assist (AIM)", function(v) SystemCfg.Module_Beta.Active = v end)
-AddToggle("Show Boundary (FOV)", function(v) 
-    SystemCfg.Module_Beta.RenderCircle = v 
-    RenderPoint.Visible = v
-end)
+MainTab:CreateToggle({
+   Name = "Exibir Círculo de FOV",
+   CurrentValue = false,
+   Callback = function(Value)
+      Settings.Assistance.ShowFOV = Value
+      FOVCircle.Visible = Value
+   end,
+})
 
--- Loop Principal
+-- [ SEÇÃO DE VISUAIS ]
+VisualTab:CreateSection("Engine de Visualização")
+
+VisualTab:CreateToggle({
+   Name = "Ativar Visual Engine (ESP)",
+   CurrentValue = false,
+   Callback = function(Value)
+      Settings.Visuals.Enabled = Value
+   end,
+})
+
+-- [ LOOP DE EXECUÇÃO ]
 RunService.RenderStepped:Connect(function()
-    if SystemCfg.Module_Beta.RenderCircle then
-        RenderPoint.Radius = SystemCfg.Module_Beta.Range
-        RenderPoint.Position = UserInputService:GetMouseLocation()
+    -- Atualiza posição do FOV
+    if Settings.Assistance.ShowFOV then
+        FOVCircle.Position = UserInputService:GetMouseLocation()
     end
 
-    if SystemCfg.Module_Beta.Active then
-        local TargetPart = SeekTarget()
-        if TargetPart then
-            -- Mira Instantânea (Lock-on puro) com erro aleatório mínimo
-            local RandomOffset = Vector3.new(math.random(-2, 2)/10, math.random(-2, 2)/10, math.random(-2, 2)/10)
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, TargetPart.Position + RandomOffset)
+    -- Lógica de Mira (Instantânea + Erro Humano de 0.2 studs)
+    if Settings.Assistance.Enabled then
+        local Target = GetTarget()
+        if Target then
+            local RandomError = Vector3.new(math.random(-2,2)/10, math.random(-2,2)/10, math.random(-2,2)/10)
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, Target.Position + RandomError)
         end
     end
-
-    for p, obj in pairs(Data_Cache) do Refresh_Link(p, obj) end
 end)
 
-for _, p in pairs(Players:GetPlayers()) do Initialize_Link(p) end
-Players.PlayerAdded:Connect(Initialize_Link)
-
--- Abrir/Fechar Menu (RightShift ou Insert)
-UserInputService.InputBegan:Connect(function(io)
-    if io.KeyCode == Enum.KeyCode.RightShift or io.KeyCode == Enum.KeyCode.Insert then
-        Main.Visible = not Main.Visible
-    end
-end)
+Rayfield:Notify({
+   Title = "Script Carregado",
+   Content = "Use Right Shift para abrir/fechar o menu.",
+   Duration = 5,
+   Image = 4483362458,
+})
