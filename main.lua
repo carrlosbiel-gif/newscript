@@ -16,14 +16,14 @@ local Camera = workspace.CurrentCamera
 local Settings = {
     ESP = {
         Enabled = false,
-        TeamCheck = true, -- NOVO: Ignora aliados no ESP
+        TeamCheck = false, -- NOVO: Ignora aliados no ESP
         BoxColor = Color3.fromRGB(255, 0, 0),
         SnaplineEnabled = false,
         Rainbow = false
     },
     Aimbot = {
         Enabled = false,
-        TeamCheck = true, -- NOVO: Ignora aliados na Mira
+        TeamCheck = false, -- NOVO: Ignora aliados na Mira
         FOV = 100,
         MaxDistance = 500,
         ShowFOV = false,
