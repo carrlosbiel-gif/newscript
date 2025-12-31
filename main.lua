@@ -14,7 +14,8 @@ local Settings = {
         TeamCheck = false,
         FOV = 150,
         ShowFOV = false,
-        TargetPart = "Head" -- Alterna entre "Head" e "HumanoidRootPart" (Peito)
+        TargetPart = "Head",
+        MaxDistance = 500 -- DISTÂNCIA MÁXIMA PADRÃO
     }
 }
 
@@ -58,7 +59,7 @@ local function CreateESP(Player)
     ESP_Table[Player] = Objects
 end
 
--- Atualizar ESP com Cor Dinâmica por Vida
+-- Atualizar ESP
 local function UpdateESP(Player, Objects)
     local Char = Player.Character
     local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
@@ -74,7 +75,6 @@ local function UpdateESP(Player, Objects)
         local Dist = (Camera.CFrame.Position - Root.Position).Magnitude
         local Scale = 1000 / Dist
         
-        -- Lógica de Cor por Vida (Verde -> Amarelo -> Vermelho)
         local healthPercent = Hum.Health / Hum.MaxHealth
         local dynamicColor = Color3.fromHSV(healthPercent * 0.3, 1, 1) 
 
@@ -83,29 +83,36 @@ local function UpdateESP(Player, Objects)
         Objects.Box.Color = dynamicColor
         Objects.Box.Visible = true
         
-        Objects.Distance.Text = math.floor(Dist) .. "m [" .. math.floor(Hum.Health) .. " HP]"
+        Objects.Distance.Text = math.floor(Dist) .. "m"
         Objects.Distance.Position = Vector2.new(Pos.X, Objects.Box.Position.Y + Objects.Box.Size.Y + 5)
-        Objects.Distance.Color = dynamicColor
         Objects.Distance.Visible = true
     else
         for _, obj in pairs(Objects) do obj.Visible = false end
     end
 end
 
--- Busca de Alvo
+-- Busca de Alvo (Com limite de distância)
 local function GetClosestPlayer()
     local Target = nil
     local ShortestDist = Settings.Aimbot.FOV
     for _, Player in pairs(Players:GetPlayers()) do
-        if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild(Settings.Aimbot.TargetPart) then
+        if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild(Settings.Aimbot.TargetPart) and Player.Character:FindFirstChild("HumanoidRootPart") then
             local Part = Player.Character[Settings.Aimbot.TargetPart]
-            local Pos, OnScreen = Camera:WorldToViewportPoint(Part.Position)
-            if OnScreen then
-                local MousePos = UserInputService:GetMouseLocation()
-                local Dist = (Vector2.new(Pos.X, Pos.Y) - MousePos).Magnitude
-                if Dist < ShortestDist and IsVisible(Part) then
-                    ShortestDist = Dist
-                    Target = Player
+            local Root = Player.Character.HumanoidRootPart
+            
+            -- VERIFICA A DISTÂNCIA REAL ENTRE VOCÊ E O ALVO
+            local RealDist = (LocalPlayer.Character.HumanoidRootPart.Position - Root.Position).Magnitude
+            
+            -- SÓ PROSSEGUE SE ESTIVER DENTRO DO LIMITE DE DISTÂNCIA
+            if RealDist <= Settings.Aimbot.MaxDistance then
+                local Pos, OnScreen = Camera:WorldToViewportPoint(Part.Position)
+                if OnScreen then
+                    local MousePos = UserInputService:GetMouseLocation()
+                    local DistFOV = (Vector2.new(Pos.X, Pos.Y) - MousePos).Magnitude
+                    if DistFOV < ShortestDist and IsVisible(Part) then
+                        ShortestDist = DistFOV
+                        Target = Player
+                    end
                 end
             end
         end
@@ -116,8 +123,8 @@ end
 -- INTERFACE
 local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 350, 0, 480)
-MainFrame.Position = UDim2.new(0.5, -175, 0.5, -240)
+MainFrame.Size = UDim2.new(0, 350, 0, 560) -- Aumentado para caber novos botões
+MainFrame.Position = UDim2.new(0.5, -175, 0.5, -280)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
@@ -159,7 +166,7 @@ Content.ZIndex = 2
 
 local function NewBtn(txt, pos, color)
     local b = Instance.new("TextButton", Content)
-    b.Size = UDim2.new(0, 310, 0, 40)
+    b.Size = UDim2.new(0, 310, 0, 35)
     b.Position = pos
     b.Text = txt
     b.BackgroundColor3 = color
@@ -171,36 +178,52 @@ local function NewBtn(txt, pos, color)
     return b
 end
 
-local AimBtn = NewBtn("Aimbot: OFF", UDim2.new(0, 20, 0, 5), Color3.fromRGB(30, 30, 30))
-local TargetBtn = NewBtn("Alvo: CABEÇA", UDim2.new(0, 20, 0, 50), Color3.fromRGB(30, 30, 30)) -- NOVO: Botão Cabeça/Peito
-local EspBtn = NewBtn("ESP: OFF", UDim2.new(0, 20, 0, 95), Color3.fromRGB(30, 30, 30))
-local FovVisBtn = NewBtn("Ver Círculo: OFF", UDim2.new(0, 20, 0, 140), Color3.fromRGB(30, 30, 30))
+local AimBtn = NewBtn("Aimbot: OFF", UDim2.new(0, 20, 0, 0), Color3.fromRGB(30, 30, 30))
+local TargetBtn = NewBtn("Alvo: CABEÇA", UDim2.new(0, 20, 0, 40), Color3.fromRGB(30, 30, 30))
+local EspBtn = NewBtn("ESP: OFF", UDim2.new(0, 20, 0, 80), Color3.fromRGB(30, 30, 30))
+local FovVisBtn = NewBtn("Ver Círculo: OFF", UDim2.new(0, 20, 0, 120), Color3.fromRGB(30, 30, 30))
 
+-- CONTROLE DE FOV
 local DisplayFov = Instance.new("TextLabel", Content)
-DisplayFov.Size = UDim2.new(0, 310, 0, 30)
-DisplayFov.Position = UDim2.new(0, 20, 0, 185)
-DisplayFov.Text = "FOV: " .. Settings.Aimbot.FOV
+DisplayFov.Size = UDim2.new(0, 310, 0, 25)
+DisplayFov.Position = UDim2.new(0, 20, 0, 160)
+DisplayFov.Text = "TAMANHO FOV: " .. Settings.Aimbot.FOV
 DisplayFov.TextColor3 = Color3.fromRGB(255, 255, 255)
 DisplayFov.BackgroundTransparency = 1
 DisplayFov.Font = Enum.Font.GothamBold
 DisplayFov.ZIndex = 3
 
-local Menos = NewBtn("FOV -10", UDim2.new(0, 20, 0, 220), Color3.fromRGB(150, 50, 50))
-Menos.Size = UDim2.new(0, 150, 0, 40)
-local Mais = NewBtn("FOV +10", UDim2.new(0, 180, 0, 220), Color3.fromRGB(50, 100, 150))
-Mais.Size = UDim2.new(0, 150, 0, 40)
+local MenosFov = NewBtn("FOV -10", UDim2.new(0, 20, 0, 190), Color3.fromRGB(150, 50, 50))
+MenosFov.Size = UDim2.new(0, 150, 0, 30)
+local MaisFov = NewBtn("FOV +10", UDim2.new(0, 180, 0, 190), Color3.fromRGB(50, 100, 150))
+MaisFov.Size = UDim2.new(0, 150, 0, 30)
+
+-- CONTROLE DE DISTÂNCIA DO AIM (O QUE VOCÊ PEDIU)
+local DisplayDist = Instance.new("TextLabel", Content)
+DisplayDist.Size = UDim2.new(0, 310, 0, 25)
+DisplayDist.Position = UDim2.new(0, 20, 0, 230)
+DisplayDist.Text = "ALCANCE AIM: " .. Settings.Aimbot.MaxDistance .. "m"
+DisplayDist.TextColor3 = Color3.fromRGB(255, 255, 0)
+DisplayDist.BackgroundTransparency = 1
+DisplayDist.Font = Enum.Font.GothamBold
+DisplayDist.ZIndex = 3
+
+local MenosDist = NewBtn("ALCANCE -50m", UDim2.new(0, 20, 0, 260), Color3.fromRGB(150, 50, 50))
+MenosDist.Size = UDim2.new(0, 150, 0, 30)
+local MaisDist = NewBtn("ALCANCE +50m", UDim2.new(0, 180, 0, 260), Color3.fromRGB(50, 100, 150))
+MaisDist.Size = UDim2.new(0, 150, 0, 30)
 
 -- Lógica Minimizar
 local minimizado = false
 MinBtn.MouseButton1Click:Connect(function()
     minimizado = not minimizado
-    MainFrame:TweenSize(minimizado and UDim2.new(0, 350, 0, 40) or UDim2.new(0, 350, 0, 480), "Out", "Quad", 0.3, true)
+    MainFrame:TweenSize(minimizado and UDim2.new(0, 350, 0, 40) or UDim2.new(0, 350, 0, 560), "Out", "Quad", 0.3, true)
     Content.Visible = not minimizado
     BackgroundImg.Visible = not minimizado
     MinBtn.Text = minimizado and "+" or "_"
 end)
 
--- Eventos Botões
+-- Eventos
 AimBtn.MouseButton1Click:Connect(function()
     Settings.Aimbot.Enabled = not Settings.Aimbot.Enabled
     AimBtn.Text = "Aimbot: " .. (Settings.Aimbot.Enabled and "ON" or "OFF")
@@ -208,13 +231,8 @@ AimBtn.MouseButton1Click:Connect(function()
 end)
 
 TargetBtn.MouseButton1Click:Connect(function()
-    if Settings.Aimbot.TargetPart == "Head" then
-        Settings.Aimbot.TargetPart = "HumanoidRootPart"
-        TargetBtn.Text = "Alvo: PEITO"
-    else
-        Settings.Aimbot.TargetPart = "Head"
-        TargetBtn.Text = "Alvo: CABEÇA"
-    end
+    Settings.Aimbot.TargetPart = (Settings.Aimbot.TargetPart == "Head" and "HumanoidRootPart" or "Head")
+    TargetBtn.Text = "Alvo: " .. (Settings.Aimbot.TargetPart == "Head" and "CABEÇA" or "PEITO")
 end)
 
 EspBtn.MouseButton1Click:Connect(function()
@@ -229,15 +247,27 @@ FovVisBtn.MouseButton1Click:Connect(function()
     FovVisBtn.Text = "Ver Círculo: " .. (Settings.Aimbot.ShowFOV and "ON" or "OFF")
 end)
 
-Mais.MouseButton1Click:Connect(function()
+-- Botões FOV
+MaisFov.MouseButton1Click:Connect(function()
     Settings.Aimbot.FOV = Settings.Aimbot.FOV + 10
-    DisplayFov.Text = "FOV: " .. Settings.Aimbot.FOV
+    DisplayFov.Text = "TAMANHO FOV: " .. Settings.Aimbot.FOV
 end)
-
-Menos.MouseButton1Click:Connect(function()
+MenosFov.MouseButton1Click:Connect(function()
     if Settings.Aimbot.FOV > 10 then
         Settings.Aimbot.FOV = Settings.Aimbot.FOV - 10
-        DisplayFov.Text = "FOV: " .. Settings.Aimbot.FOV
+        DisplayFov.Text = "TAMANHO FOV: " .. Settings.Aimbot.FOV
+    end
+end)
+
+-- Botões Alcance (Distância)
+MaisDist.MouseButton1Click:Connect(function()
+    Settings.Aimbot.MaxDistance = Settings.Aimbot.MaxDistance + 50
+    DisplayDist.Text = "ALCANCE AIM: " .. Settings.Aimbot.MaxDistance .. "m"
+end)
+MenosDist.MouseButton1Click:Connect(function()
+    if Settings.Aimbot.MaxDistance > 50 then
+        Settings.Aimbot.MaxDistance = Settings.Aimbot.MaxDistance - 50
+        DisplayDist.Text = "ALCANCE AIM: " .. Settings.Aimbot.MaxDistance .. "m"
     end
 end)
 
@@ -249,13 +279,9 @@ RunService.RenderStepped:Connect(function()
     end
     if Settings.Aimbot.Enabled then
         local T = GetClosestPlayer()
-        if T and T.Character and T.Character:FindFirstChild(Settings.Aimbot.TargetPart) then 
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, T.Character[Settings.Aimbot.TargetPart].Position) 
-        end
+        if T then Camera.CFrame = CFrame.new(Camera.CFrame.Position, T.Character[Settings.Aimbot.TargetPart].Position) end
     end
-    for Player, Objects in pairs(ESP_Table) do
-        UpdateESP(Player, Objects)
-    end
+    for Player, Objects in pairs(ESP_Table) do UpdateESP(Player, Objects) end
 end)
 
 for _, p in pairs(Players:GetPlayers()) do CreateESP(p) end
