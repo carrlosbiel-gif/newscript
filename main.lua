@@ -1,7 +1,7 @@
---// 99 Nights in the Forest Script - Xeno Optimized //--
+--// 99 Nights in the Forest Script with Rayfield GUI //--
 
--- Load Rayfield UI Library (Link alternativo para maior compatibilidade)
-local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/SiriusSoftwareRepo/Rayfield/main/source'))()
+-- Load Rayfield UI Library
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 -- Services
 local Players = game:GetService("Players")
@@ -10,15 +10,15 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
--- Window Setup (Ajustado para Xeno)
+-- Window Setup
 local Window = Rayfield:CreateWindow({
-    Name = "99 Nights | Xeno Edition",
-    LoadingTitle = "Carregando 99 Nights",
+    Name = "99 Nights",
+    LoadingTitle = "99 Nights Script",
     LoadingSubtitle = "by Raygull",
     ConfigurationSaving = {
-        Enabled = false, -- Desativado por padrão para evitar crashes em executores específicos
-        FolderName = "NightsXeno",
-        FileName = "Config"
+        Enabled = true,
+        FolderName = nil,
+        FileName = "99NightsSettings"
     },
     Discord = {
         Enabled = false,
@@ -45,11 +45,10 @@ local ignoreDistanceFrom = Vector3.new(0, 0, 0)
 local minDistance = 50
 local AutoTreeFarmEnabled = false
 
--- Click simulation (Melhorado para Xeno)
+-- Click simulation
 local VirtualInputManager = game:GetService("VirtualInputManager")
 function mouse1click()
     VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-    task.wait(0.01)
     VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
 end
 
@@ -122,6 +121,7 @@ local function createESP(item)
     end
 end
 
+
 local function toggleESP(state)
     espEnabled = state
     for _, item in pairs(workspace:GetDescendants()) do
@@ -143,11 +143,12 @@ workspace.DescendantAdded:Connect(function(desc)
     end
 end)
 
--- NPC ESP Setup
+-- ESP for NPCs
 local npcBoxes = {}
 
 local function createNPCESP(npc)
     if not npc:IsA("Model") or npc:FindFirstChild("HumanoidRootPart") == nil then return end
+
     local root = npc:FindFirstChild("HumanoidRootPart")
     if npcBoxes[npc] then return end
 
@@ -168,6 +169,7 @@ local function createNPCESP(npc)
 
     npcBoxes[npc] = {box = box, name = nameText}
 
+    -- Cleanup on remove
     npc.AncestryChanged:Connect(function(_, parent)
         if not parent and npcBoxes[npc] then
             npcBoxes[npc].box:Remove()
@@ -186,6 +188,7 @@ local function toggleNPCESP(state)
         end
         npcBoxes = {}
     else
+        -- Show NPC ESP for already existing NPCs
         for _, obj in ipairs(workspace:GetDescendants()) do
             if table.find(AimbotTargets, obj.Name) and obj:IsA("Model") then
                 createNPCESP(obj)
@@ -194,8 +197,18 @@ local function toggleNPCESP(state)
     end
 end
 
--- Auto Tree Farm
+workspace.DescendantAdded:Connect(function(desc)
+    if table.find(AimbotTargets, desc.Name) and desc:IsA("Model") then
+        task.wait(0.1)
+        if npcESPEnabled then
+            createNPCESP(desc)
+        end
+    end
+end)
+
+-- Auto Tree Farm Logic with timeout
 local badTrees = {}
+
 task.spawn(function()
     while true do
         if AutoTreeFarmEnabled then
@@ -234,51 +247,256 @@ task.spawn(function()
     end
 end)
 
--- Aimbot & Fly logic continuam conforme seu original...
--- (Omitido aqui por brevidade, mas mantido no arquivo funcional)
+-- Optimized Aimbot Logic
+local lastAimbotCheck = 0
+local aimbotCheckInterval = 0.02 -- Faster reaction time
+local smoothness = 0.2 -- Smooth camera interpolation
+
+RunService.RenderStepped:Connect(function()
+    if not AimbotEnabled or not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        FOVCircle.Visible = false
+        return
+    end
+
+    local currentTime = tick()
+    if currentTime - lastAimbotCheck < aimbotCheckInterval then return end
+    lastAimbotCheck = currentTime
+
+    local mousePos = UserInputService:GetMouseLocation()
+    local closestTarget, shortestDistance = nil, math.huge
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if table.find(AimbotTargets, obj.Name) and obj:IsA("Model") then
+            local head = obj:FindFirstChild("Head")
+            if head then
+                local screenPos, onScreen = camera:WorldToViewportPoint(head.Position)
+                if onScreen then
+                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                    if dist < shortestDistance and dist <= FOVRadius then
+                        shortestDistance = dist
+                        closestTarget = head
+                    end
+                end
+            end
+        end
+    end
+
+    if closestTarget then
+        local currentCF = camera.CFrame
+        local targetCF = CFrame.new(camera.CFrame.Position, closestTarget.Position)
+        camera.CFrame = currentCF:Lerp(targetCF, smoothness) -- Smoothly rotate camera
+        FOVCircle.Position = Vector2.new(mousePos.X, mousePos.Y)
+        FOVCircle.Visible = true
+    else
+        FOVCircle.Visible = false
+    end
+end)
+
+
+-- Fly Logic
+local flying, flyConnection = false, nil
+local speed = 60
+
+local function startFlying()
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local bodyGyro = Instance.new("BodyGyro", hrp)
+    local bodyVelocity = Instance.new("BodyVelocity", hrp)
+    bodyGyro.P = 9e4
+    bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    bodyGyro.CFrame = hrp.CFrame
+    bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+
+    flyConnection = RunService.RenderStepped:Connect(function()
+        local moveVec = Vector3.zero
+        local camCF = camera.CFrame
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVec += camCF.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVec -= camCF.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVec -= camCF.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVec += camCF.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveVec += camCF.UpVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveVec -= camCF.UpVector end
+        bodyVelocity.Velocity = moveVec.Magnitude > 0 and moveVec.Unit * speed or Vector3.zero
+        bodyGyro.CFrame = camCF
+    end)
+end
+
+local function stopFlying()
+    if flyConnection then flyConnection:Disconnect() end
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        for _, v in pairs(hrp:GetChildren()) do
+            if v:IsA("BodyGyro") or v:IsA("BodyVelocity") then v:Destroy() end
+        end
+    end
+end
+
+local function toggleFly(state)
+    flying = state
+    if flying then startFlying() else stopFlying() end
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.Q then
+        toggleFly(not flying)
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    for npc, visuals in pairs(npcBoxes) do
+        local box = visuals.box
+        local name = visuals.name
+
+        if npc and npc:FindFirstChild("HumanoidRootPart") then
+            local hrp = npc.HumanoidRootPart
+            local size = Vector2.new(60, 80)
+            local screenPos, onScreen = camera:WorldToViewportPoint(hrp.Position)
+
+            if onScreen then
+                box.Position = Vector2.new(screenPos.X - size.X / 2, screenPos.Y - size.Y / 2)
+                box.Size = size
+                box.Visible = true
+
+                name.Position = Vector2.new(screenPos.X, screenPos.Y - size.Y / 2 - 15)
+                name.Visible = true
+            else
+                box.Visible = false
+                name.Visible = false
+            end
+        else
+            box:Remove()
+            name:Remove()
+            npcBoxes[npc] = nil
+        end
+    end
+end)
 
 -- GUI Tabs
-local HomeTab = Window:CreateTab("🏠 Início", 4483362458)
+local HomeTab = Window:CreateTab("🏠Home🏠", 4483362458)
 
 HomeTab:CreateButton({
-    Name = "Teleportar para Fogueira",
+    Name = "Teleport to Campfire",
     Callback = function()
         LocalPlayer.Character:PivotTo(CFrame.new(0, 10, 0))
     end
 })
 
+HomeTab:CreateButton({
+    Name = "Teleport to Grinder",
+    Callback = function()
+        LocalPlayer.Character:PivotTo(CFrame.new(16.1,4,-4.6))
+    end
+})
+
 HomeTab:CreateToggle({
-    Name = "ESP de Itens",
+    Name = "Item ESP",
     CurrentValue = false,
     Callback = toggleESP
 })
 
 HomeTab:CreateToggle({
-    Name = "Auto Tree Farm",
+    Name = "NPC ESP",
     CurrentValue = false,
-    Callback = function(v) AutoTreeFarmEnabled = v end
+    Callback = function(value)
+        toggleNPCESP(value)
+        Rayfield:Notify({
+            Title = "NPC ESP",
+            Content = value and "NPC ESP Enabled" or "NPC ESP Disabled",
+            Duration = 4,
+            Image = 4483362458,
+        })
+    end
 })
 
--- Aba de Teleportes (Gera botões automaticamente)
-local TeleTab = Window:CreateTab("🧲 Teleportes", 4483362458)
+HomeTab:CreateToggle({
+    Name = "Auto Tree Farm (Small Tree)",
+    CurrentValue = false,
+    Callback = function(value)
+        AutoTreeFarmEnabled = value
+    end
+})
 
+HomeTab:CreateToggle({
+    Name = "Aimbot (Right Click)",
+    CurrentValue = false,
+    Callback = function(value)
+        AimbotEnabled = value
+        Rayfield:Notify({
+            Title = "Aimbot",
+            Content = value and "Enabled - Hold Right Click to aim." or "Disabled.",
+            Duration = 4,
+            Image = 4483362458,
+        })
+    end
+})
+
+HomeTab:CreateToggle({
+    Name = "Fly (WASD + Space + Shift)",
+    CurrentValue = false,
+    Callback = function(value)
+        toggleFly(value)
+        Rayfield:Notify({
+            Title = "Fly",
+            Content = value and "Fly Enabled" or "Fly Disabled",
+            Duration = 4,
+            Image = 4483362458,
+        })
+    end
+})
+
+-- Teleport Tab
+local TeleTab = Window:CreateTab("🧲Teleport🧲", 4483362458)
 for _, itemName in ipairs(teleportTargets) do
     TeleTab:CreateButton({
-        Name = itemName,
+        Name = "Teleport to " .. itemName,
         Callback = function()
-            -- Lógica de busca de item
-            local target = nil
-            for _, v in pairs(workspace:GetDescendants()) do
-                if v.Name == itemName and (v:IsA("Model") or v:IsA("BasePart")) then
-                    target = v
-                    break
+            local closest, shortest = nil, math.huge
+            for _, obj in pairs(workspace:GetDescendants()) do
+                if obj.Name == itemName and obj:IsA("Model") then
+                    local cf = nil
+                    if pcall(function() cf = obj:GetPivot() end) then
+                        -- success
+                    else
+                        local part = obj:FindFirstChildWhichIsA("BasePart")
+                        if part then cf = part.CFrame end
+                    end
+                    if cf then
+                        local dist = (cf.Position - ignoreDistanceFrom).Magnitude
+                        if dist >= minDistance and dist < shortest then
+                            closest = obj
+                            shortest = dist
+                        end
+                    end
                 end
             end
-            if target then
-                LocalPlayer.Character:PivotTo(target:GetPivot() + Vector3.new(0, 5, 0))
+            if closest then
+                local cf = nil
+                if pcall(function() cf = closest:GetPivot() end) then
+                    -- success
+                else
+                    local part = closest:FindFirstChildWhichIsA("BasePart")
+                    if part then cf = part.CFrame end
+                end
+                if cf then
+                    LocalPlayer.Character:PivotTo(cf + Vector3.new(0, 5, 0))
+                else
+                    Rayfield:Notify({
+                        Title = "Teleport Failed",
+                        Content = "Could not find a valid position to teleport.",
+                        Duration = 5,
+                        Image = 4483362458,
+                    })
+                end
+            else
+                Rayfield:Notify({
+                    Title = "Item Not Found",
+                    Content = itemName .. " not found or too close to origin.",
+                    Duration = 5,
+                    Image = 4483362458,
+                })
             end
         end
     })
-end
-
-Rayfield:Notify({Title = "Sucesso", Content = "Script carregado no Xeno!", Duration = 5})
+end 
